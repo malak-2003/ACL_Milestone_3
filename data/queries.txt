@@ -1,0 +1,70 @@
+-- name: hotels_in_city
+MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name:$city})
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating, h.cleanliness_base AS cleanliness LIMIT $limit
+
+-- name: hotels_in_city_min_rating
+MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name:$city})
+WHERE coalesce(h.star_rating,0) >= $min_rating
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating LIMIT $limit
+
+-- name: hotel_by_name
+MATCH (h:Hotel) WHERE toLower(h.name) CONTAINS toLower($q)
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating LIMIT $limit
+
+-- name: top_hotels
+MATCH (h:Hotel)
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating
+ORDER BY coalesce(h.star_rating,0) DESC LIMIT $limit
+
+-- name: hotels_by_country
+MATCH (h:Hotel)-[:LOCATED_IN]->(c:City)-[:LOCATED_IN]->(country:Country {name:$country})
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating LIMIT $limit
+
+-- name: most_reviewed_hotels_in_city
+MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name:$city})
+WITH h, size((h)<-[:REVIEWED]-()) AS reviews
+RETURN h.hotel_id AS hotel_id, h.name AS name, reviews
+ORDER BY reviews DESC LIMIT $limit
+
+-- name: hotel_reviews
+MATCH (h:Hotel {hotel_id:$hotel_id})<-[:REVIEWED]-(r:Review)
+RETURN r.review_id AS review_id,
+       coalesce(r.text, r.review_text, "") AS review_text,
+       coalesce(r.date, r.review_date, "") AS review_date,
+       coalesce(r.score_overall, r.score_overall) AS score_overall,
+       coalesce(r.score_cleanliness, r.score_cleanliness) AS score_cleanliness,
+       coalesce(r.score_comfort, r.score_comfort) AS score_comfort,
+       coalesce(r.score_facilities, r.score_facilities) AS score_facilities,
+       coalesce(r.score_location, r.score_location) AS score_location,
+       coalesce(r.score_staff, r.score_staff) AS score_staff,
+       coalesce(r.score_value_for_money, r.score_value_for_money) AS score_value_for_money
+ORDER BY coalesce(r.date, r.review_date) DESC LIMIT $limit
+
+- name: hotels_by_avg_facilities_score
+// Find hotels whose average review 'score_facilities' >= min_facility_score
+MATCH (h:Hotel)<-[:REVIEWED]-(r:Review)
+WITH h, avg(r.score_facilities) AS avg_facilities
+WHERE coalesce(avg_facilities,0) >= $min_facility_score
+RETURN h.hotel_id AS hotel_id, h.name AS name, avg_facilities
+ORDER BY avg_facilities DESC LIMIT $limit
+
+-- name: visa_requirement
+MATCH (fromC:Country {name:$from})-[rel:NEEDS_VISA]->(toC:Country {name:$to})
+RETURN rel.visa_type AS visa_type
+
+-- name: traveller_type_preferences
+MATCH (t:Traveller {type:$type})-[:STAYED_AT]->(h:Hotel)
+RETURN h.hotel_id AS hotel_id, h.name AS name, count(*) AS visits
+ORDER BY visits DESC LIMIT $limit
+
+-- name: hotels_with_min_reviews
+MATCH (h:Hotel)<-[:REVIEWED]-(r:Review)
+WITH h, count(r) AS reviews
+WHERE reviews >= $min_reviews
+RETURN h.hotel_id AS hotel_id, h.name AS name, reviews
+ORDER BY reviews DESC LIMIT $limit
+
+-- name: most_active_reviewers
+MATCH (t:Traveller)-[:WROTE]->(r:Review)
+RETURN t.user_id AS user_id, count(r) AS reviews
+ORDER BY reviews DESC LIMIT $limit
