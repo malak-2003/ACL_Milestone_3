@@ -1,0 +1,16 @@
+# Core dependencies for Milestone 3 - Node Embeddings
+neo4j==5.14.0
+sentence-transformers==2.2.2
+numpy==1.24.3
+pandas==2.0.3
+tqdm==4.66.1
+
+# For preprocessing (intent detection & entity extraction)
+spacy==3.7.2
+huggingface-hub==0.19.4
+transformers==4.35.2
+
+# Optional but useful
+scikit-learn==1.3.2
+matplotlib==3.8.2
+seaborn==0.13.0
