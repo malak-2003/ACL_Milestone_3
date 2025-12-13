@@ -9,16 +9,12 @@ import pickle
 
 # Configuration
 EMBEDDING_MODELS = {
-    "minilm": "sentence-transformers/all-MiniLM-L6-v2",  # 384 dimensions, fast
-    "mpnet": "sentence-transformers/all-mpnet-base-v2",   # 768 dimensions, better quality
+    "minilm": "sentence-transformers/all-MiniLM-L6-v2",  
+    "mpnet": "sentence-transformers/all-mpnet-base-v2", 
 }
 
 
 def load_config(path="data/config.txt"):
-    """
-    Reads URI, USERNAME, PASSWORD from config.txt
-    Format: KEY=VALUE
-    """
     config = {}
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -31,22 +27,8 @@ def load_config(path="data/config.txt"):
 
 
 class NodeEmbeddingGenerator:
-    """
-    Generates and stores embeddings for hotel nodes in Neo4j.
-    Supports multiple embedding models for comparison.
-    """
-    
     def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str, 
                  model_name: str = "minilm"):
-        """
-        Initialize the embedding generator.
-        
-        Args:
-            neo4j_uri: Neo4j database URI
-            neo4j_user: Neo4j username
-            neo4j_password: Neo4j password
-            model_name: Either "minilm" or "mpnet"
-        """
         self.driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
         self.model_name = model_name
         
@@ -56,24 +38,11 @@ class NodeEmbeddingGenerator:
         print(f"Embedding dimension: {self.embedding_dim}")
         
     def close(self):
-        """Close Neo4j connection."""
         self.driver.close()
     
     def create_hotel_text_representation(self, hotel_data: Dict) -> str:
-        """
-        Create a rich text representation of a hotel node.
-        Combines multiple properties into a single descriptive string.
-        EMPHASIZES LOCATION by repeating it multiple times.
-        
-        Args:
-            hotel_data: Dictionary containing hotel properties
-            
-        Returns:
-            Text representation of the hotel
-        """
         parts = []
         
-        # LOCATION FIRST AND REPEATED - gives it more weight
         city = hotel_data.get('city', '')
         country = hotel_data.get('country', '')
         
@@ -128,12 +97,6 @@ class NodeEmbeddingGenerator:
         return text
     
     def fetch_all_hotels(self) -> List[Dict]:
-        """
-        Fetch all hotel nodes from Neo4j.
-        
-        Returns:
-            List of hotel dictionaries
-        """
         query = """
         MATCH (h:Hotel)
         OPTIONAL MATCH (h)-[:LOCATED_IN]->(c:City)
@@ -156,15 +119,6 @@ class NodeEmbeddingGenerator:
         return hotels
     
     def generate_embeddings(self, hotels: List[Dict]) -> Dict[str, np.ndarray]:
-        """
-        Generate embeddings for all hotels.
-        
-        Args:
-            hotels: List of hotel dictionaries
-            
-        Returns:
-            Dictionary mapping hotel_id to embedding vector
-        """
         embeddings = {}
         texts = []
         hotel_ids = []
@@ -192,12 +146,6 @@ class NodeEmbeddingGenerator:
         return embeddings
     
     def create_vector_index(self, index_name: str = None):
-        """
-        Create a vector index in Neo4j for similarity search.
-        
-        Args:
-            index_name: Name of the vector index (default: hotel_embeddings_{model_name})
-        """
         if index_name is None:
             index_name = f"hotel_embeddings_{self.model_name}"
         
@@ -232,12 +180,6 @@ class NodeEmbeddingGenerator:
                 print("Vector index may already exist or Neo4j version may not support vector indexes.")
     
     def store_embeddings_in_neo4j(self, embeddings: Dict[str, np.ndarray]):
-        """
-        Store embeddings as properties on hotel nodes.
-        
-        Args:
-            embeddings: Dictionary mapping hotel_id to embedding vector
-        """
         property_name = f"embedding_{self.model_name}"
         
         query = f"""
@@ -257,13 +199,6 @@ class NodeEmbeddingGenerator:
     
     def save_embeddings_to_file(self, embeddings: Dict[str, np.ndarray], 
                                 filepath: str = None):
-        """
-        Save embeddings to a pickle file for backup/offline use.
-        
-        Args:
-            embeddings: Dictionary mapping hotel_id to embedding vector
-            filepath: Path to save file (default: embeddings_{model_name}.pkl)
-        """
         if filepath is None:
             filepath = f"embeddings_{self.model_name}.pkl"
         
@@ -273,15 +208,6 @@ class NodeEmbeddingGenerator:
         print(f"Saved embeddings to {filepath}")
     
     def load_embeddings_from_file(self, filepath: str) -> Dict[str, np.ndarray]:
-        """
-        Load embeddings from a pickle file.
-        
-        Args:
-            filepath: Path to pickle file
-            
-        Returns:
-            Dictionary mapping hotel_id to embedding vector
-        """
         with open(filepath, 'rb') as f:
             embeddings = pickle.load(f)
         
@@ -289,12 +215,6 @@ class NodeEmbeddingGenerator:
         return embeddings
     
     def generate_and_store_all(self, save_to_file: bool = True):
-        """
-        Complete pipeline: fetch hotels, generate embeddings, store in Neo4j.
-        
-        Args:
-            save_to_file: Whether to save embeddings to file as backup
-        """
         # Fetch hotels
         hotels = self.fetch_all_hotels()
         
@@ -322,22 +242,8 @@ class NodeEmbeddingGenerator:
 
 
 class EmbeddingRetriever:
-    """
-    Retrieves similar hotels using vector similarity search.
-    Supports both models for comparison.
-    """
-    
     def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str,
                  model_name: str = "minilm"):
-        """
-        Initialize the retriever.
-        
-        Args:
-            neo4j_uri: Neo4j database URI
-            neo4j_user: Neo4j username
-            neo4j_password: Neo4j password
-            model_name: Either "minilm" or "mpnet"
-        """
         self.driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
         self.model_name = model_name
         
@@ -345,33 +251,13 @@ class EmbeddingRetriever:
         self.model = SentenceTransformer(EMBEDDING_MODELS[model_name])
     
     def close(self):
-        """Close Neo4j connection."""
         self.driver.close()
     
     def embed_query(self, query: str) -> np.ndarray:
-        """
-        Generate embedding for a user query.
-        
-        Args:
-            query: User query text
-            
-        Returns:
-            Query embedding vector
-        """
         return self.model.encode(query, convert_to_numpy=True)
     
     def find_similar_hotels_vector_index(self, query_embedding: np.ndarray, 
                                         limit: int = 10) -> List[Dict]:
-        """
-        Find similar hotels using Neo4j vector index (if available).
-        
-        Args:
-            query_embedding: Query embedding vector
-            limit: Number of results to return
-            
-        Returns:
-            List of similar hotels with scores
-        """
         index_name = f"hotel_embeddings_{self.model_name}"
         
         query = f"""
@@ -404,18 +290,6 @@ class EmbeddingRetriever:
     
     def find_similar_hotels_manual(self, query_embedding: np.ndarray,
                                    limit: int = 10, city_filter: str = None) -> List[Dict]:
-        """
-        Find similar hotels using manual cosine similarity calculation.
-        Fallback when vector index is not available.
-        
-        Args:
-            query_embedding: Query embedding vector
-            limit: Number of results to return
-            city_filter: Optional city name to filter results
-            
-        Returns:
-            List of similar hotels with scores
-        """
         property_name = f"embedding_{self.model_name}"
         
         # Fetch all hotels with embeddings
@@ -477,19 +351,7 @@ class EmbeddingRetriever:
     def search(self, query: str, limit: int = 10, 
                use_vector_index: bool = True, city_filter: str = None,
                auto_detect_city: bool = True) -> List[Dict]:
-        """
-        Search for similar hotels given a text query.
         
-        Args:
-            query: User query text
-            limit: Number of results to return
-            use_vector_index: Whether to use vector index (if available)
-            city_filter: Specific city to filter by (e.g., "Cairo")
-            auto_detect_city: Automatically detect city from query
-            
-        Returns:
-            List of similar hotels
-        """
         print(f"\nSearching with query: '{query}'")
         print(f"Using model: {self.model_name}")
         
@@ -530,7 +392,6 @@ class EmbeddingRetriever:
 
 
 def main():
-    """Main function for generating embeddings."""
     import argparse
     
     parser = argparse.ArgumentParser(description="Generate node embeddings for hotels")

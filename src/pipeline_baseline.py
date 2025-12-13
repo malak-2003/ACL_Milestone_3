@@ -1,26 +1,3 @@
-# src/pipeline.py
-"""
-Pipeline that connects:
- - src/preprocessing/intent_classifier.py  (hybrid_intent_detection)
- - src/preprocessing/entities_extraction.py (extract_entities, format_entities_output)
- - src/baseline_retreiver.py              (BaselineRetriever)
-
-Usage:
-    python -m src.pipeline            # runs demo queries
-    or import run_query from this module in other code
-
-Notes:
- - Expects the same project layout you described:
-    src/
-      preprocessing/
-        intent_classifier.py
-        entities_extraction.py
-      baseline_retreiver.py
-      pipeline.py  <-- this file
- - By default BaselineRetriever will read data/config.txt and data/queries.txt
-   relative to the project root (parents[1] of this file).
-"""
-
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import re
