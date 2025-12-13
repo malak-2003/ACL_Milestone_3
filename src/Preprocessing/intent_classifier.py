@@ -3,15 +3,29 @@ import re
 import json
 from typing import Dict
 from huggingface_hub import InferenceClient
-
+from dotenv import load_dotenv
+import os
+    
 # -----------------------------
 # 1. INIT HF CLIENT
 # -----------------------------
-HF_TOKEN = "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" 
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN") 
+print("!!!!!!!!!!!!!!!!!!")
+print(os.getenv("HF_TOKEN"))  # should print your token, not None
+
+
 client = InferenceClient(
     model="google/gemma-2-2b-it",
-    token=HF_TOKEN
+    token="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"
 )
+
+# Minimal test call
+try:
+    response = client.text_generation("Hello world", max_new_tokens=10)
+    print("LLM call successful:", response)
+except Exception as e:
+    print("LLM ERROR:", e)
 
 # -----------------------------
 # 2. BASIC TEXT CLEANING
@@ -140,127 +154,35 @@ def hybrid_intent_detection(user_query: str) -> Dict:
     rule_result = classify_intent_rules(user_query)
     return rule_result
 
-
-"""
-entities.py
--------------
-Extracts relevant entities from user queries for the hotel domain
-using a dataset (hotels.csv) instead of a fixed list.
-"""
-
-import spacy
-import pandas as pd
-from typing import Dict, List
-
-# -----------------------------
-# 1. LOAD SPACY MODEL
-# -----------------------------
-nlp = spacy.load("en_core_web_sm")
-
-# -----------------------------
-# 2. LOAD HOTEL DATASET
-# -----------------------------
-hotels_df = pd.read_csv("data/hotels.csv")  # adjust path if needed
-
-# Assume your hotels.csv has columns: 'hotel_name', 'city', 'country'
-HOTELS = hotels_df['hotel_name'].str.lower().tolist()
-CITIES = hotels_df['city'].str.lower().tolist()
-COUNTRIES = hotels_df['country'].str.lower().tolist()
-
-N = hotels_df['hotel_name'].str.lower().tolist()
-CITIES = hotels_df['city'].str.lower().tolist()
-COUNTRIES = hotels_df['country'].str.lower().tolist()
-
-TRAVELER_TYPES = ["family", "couple", "solo", "business", "group"]
-
-# -----------------------------
-# 3. ENTITY EXTRACTION FUNCTION
-# -----------------------------
-def extract_entities(query: str) -> Dict[str, List[str]]:
-    query_lower = query.lower()
-    doc = nlp(query_lower)
-
-    entities = {
-        "hotels": [],
-        "cities": [],
-        "countries": [],
-        "traveler_types": [],
-        "other": []
-    }
-
-    # 3a. Match hotels from dataset
-    for hotel in HOTELS:
-        if hotel in query_lower:
-            entities["hotels"].append(hotel)
-
-    # 3b. Match cities and countries from dataset
-    for city in CITIES:
-        if city in query_lower:
-            entities["cities"].append(city)
-    for country in COUNTRIES:
-        if country in query_lower:
-            entities["countries"].append(country)
-
-    # 3c. Match traveler types
-    for t in TRAVELER_TYPES:
-        if t in query_lower:
-            entities["traveler_types"].append(t)
-
-    # 3d. Use spaCy NER as fallback for any other entities
-    for ent in doc.ents:
-        if ent.label_ in ["GPE", "LOC"]:
-            if ent.text not in entities["cities"] and ent.text not in entities["countries"]:
-                entities["other"].append(ent.text)
-        elif ent.label_ == "ORG":
-            if ent.text not in entities["hotels"]:
-                entities["other"].append(ent.text)
-
-    # Remove duplicates
-    for key in entities:
-        entities[key] = list(set(entities[key]))
-
-    return entities
-
-# -----------------------------
-# 4. TEST
-# -----------------------------
-if __name__ == "__main__":
-    test_queries = [
-        "Find me a Marriott in Dubai for a family",
-        "Show Hilton Cairo reviews",
-        "Do Egyptians need a visa to travel to Thailand?",
-        "Book a hotel in Paris for solo travelers"
-    ]
-
-    for q in test_queries:
-        print(f"Query: {q}\nEntities: {extract_entities(q)}\n")
-
 # -----------------------------
 # 7. MAIN FUNCTION
 # -----------------------------
-# def main():
-#     test_queries = [
-#         "Find me hotels in Dubai under $200",
-#         "Does the Marriott Downtown have a swimming pool?",
-#         "Show me reviews for Hilton Cairo",
-#         "What is the distance between my hotel and the pyramids?",
-#         "Do Egyptians need a visa to travel to Thailand?",
-#         "I need a hotel with free wifi and breakfast",
-#         "Which hotels are closest to the airport?",
-#         "Tell me about the best luxury hotels in Paris"
-#     ]
+def main():
+    test_queries = [
+        "Find me hotels in Dubai under $200",
+        "Does the Marriott Downtown have a swimming pool?",
+        "Show me reviews for Hilton Cairo",
+        "What is the distance between my hotel and the pyramids?",
+        "Do Egyptians need a visa to travel to Thailand?",
+        "I need a hotel with free wifi and breakfast",
+        "Which hotels are closest to the airport?",
+        "Tell me about the best luxury hotels in Paris"
+    ]
 
-#     print("Intent Classification Results:\n")
-#     for q in test_queries:
-#         result = hybrid_intent_detection(q)
-#         print(f"Query: {q}")
-#         print(f"Intent: {result.get('intent', 'unknown')}")
-#         print(f"Reason: {result.get('reason', 'No reason provided')}")
-#         print(f"Method: {result.get('method', 'unknown')}")
-#         print("-" * 50 + "\n")
+    # print("Intent Classification Results:\n")
+    # for q in test_queries:
+    #     result = hybrid_intent_detection(q)
+    #     print(f"Query: {q}")
+    #     print(f"Intent: {result.get('intent', 'unknown')}")
+    #     print(f"Reason: {result.get('reason', 'No reason provided')}")
+    #     print(f"Method: {result.get('method', 'unknown')}")
+    #     print("-" * 50 + "\n")
 
-# # -----------------------------
-# # Run main
-# # -----------------------------
-# if __name__ == "__main__":
-#     main()
+# -----------------------------
+# Run main
+# -----------------------------
+if __name__ == "__main__":
+    main()
+
+
+
