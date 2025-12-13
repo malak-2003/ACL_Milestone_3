@@ -4,24 +4,7 @@ import sys
 from neo4j import GraphDatabase
 from typing import Dict, Any
 from pathlib import Path
-
-# Flexible import of load_config from your KG builder module (try a few common names)
-_load_config = None
-for candidate in ("src.create_kg", "src.Create_kg", "create_kg", "Create_kg", "src.kg", "kg"):
-    try:
-        m = __import__(candidate, fromlist=["load_config"])
-        _load_config = getattr(m, "load_config")
-        break
-    except Exception:
-        _load_config = None
-
-if _load_config is None:
-    raise ImportError(
-        "Couldn't import load_config from create_kg / Create_kg / kg. "
-        "Ensure your KG file (create_kg.py or Create_kg.py or kg.py) is in src/ or top-level and defines load_config(path)."
-    )
-
-load_config = _load_config
+from Create_kg import load_config
 
 # -------------------------
 # Query file loader
@@ -53,7 +36,7 @@ def load_queries(path: str) -> Dict[str, str]:
 # Baseline retriever
 # -------------------------
 
-DEFAULT_LIMIT = 15
+DEFAULT_LIMIT = 5
 
 class BaselineRetriever:
     def __init__(self, config_path: str = None, queries_path: str = None):
@@ -152,14 +135,6 @@ class BaselineRetriever:
 # -------------------------
 
 def demo(config_path=None, queries_path=None):
-    """
-    Demo/test runner for the principal queries in data/queries.txt.
-
-    Each entry is a tuple: (test_name, intent, entities)
-    - test_name: printed label
-    - intent: one of the intents your retriever expects (recommendation, review_lookup, etc.)
-    - entities: dict of parameters passed to the retriever
-    """
     tests = [
         ("Hotels in city (Cairo)", "recommendation", {"city": "Cairo", "limit": 5}),
         ("Hotels in city with min rating (Cairo, >=4)", "recommendation", {"city": "Cairo", "min_rating": 4.0, "limit": 5}),

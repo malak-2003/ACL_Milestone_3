@@ -239,30 +239,30 @@ def format_entities_output(entities: Dict) -> str:
     output = []
     
     if entities["hotels"]:
-        output.append(f"🏨 Hotels: {', '.join(entities['hotels'])}")
+        output.append(f"Hotels: {', '.join(entities['hotels'])}")
     
     if entities["cities"]:
-        output.append(f"📍 Cities: {', '.join(entities['cities'])}")
+        output.append(f"Cities: {', '.join(entities['cities'])}")
     
     if entities["countries"]:
-        output.append(f"🌍 Countries: {', '.join(entities['countries'])}")
+        output.append(f"Countries: {', '.join(entities['countries'])}")
     
     if entities["traveler_types"]:
-        output.append(f"👥 Traveler Types: {', '.join(entities['traveler_types'])}")
+        output.append(f"Traveler Types: {', '.join(entities['traveler_types'])}")
     
     if entities["nationality"]:
-        output.append(f"🎌 Nationalities: {', '.join(entities['nationality'])}")
+        output.append(f"Nationalities: {', '.join(entities['nationality'])}")
     
     if entities["gender"]:
-        output.append(f"🚻 Gender: {', '.join(entities['gender'])}")
+        output.append(f"Gender: {', '.join(entities['gender'])}")
     
     if entities["age_numbers"]:
         if len(entities["age_numbers"]) == 1:
-            output.append(f"🎂 Age: {entities['age_numbers'][0]} years")
+            output.append(f"Age: {entities['age_numbers'][0]} years")
         elif len(entities["age_numbers"]) == 2:
-            output.append(f"🎂 Age Range: {entities['age_numbers'][0]}-{entities['age_numbers'][1]} years")
+            output.append(f"Age Range: {entities['age_numbers'][0]}-{entities['age_numbers'][1]} years")
         else:
-            output.append(f"🎂 Ages: {', '.join(map(str, entities['age_numbers']))} years")
+            output.append(f"Ages: {', '.join(map(str, entities['age_numbers']))} years")
     
     return "\n".join(output) if output else "No entities detected"
 
@@ -296,13 +296,13 @@ if __name__ == "__main__":
         entities = extract_entities(q)
         
         # Show gender extraction specifically
-        print(f"\n📊 Gender Extraction:")
+        print(f"\nGender Extraction:")
         print(f"  Query contains 'man': {'man' in q.lower()}")
         print(f"  Query contains 'woman': {'woman' in q.lower()}")
         print(f"  Extracted genders: {entities['gender']}")
         
         formatted_output = format_entities_output(entities)
-        print(f"\n📋 All Entities:")
+        print(f"\nAll Entities:")
         print(formatted_output)
     
     # Original test queries for completeness

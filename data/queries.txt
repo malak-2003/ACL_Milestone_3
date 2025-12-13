@@ -2,19 +2,9 @@
 MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name:$city})
 RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating, h.cleanliness_base AS cleanliness LIMIT $limit
 
--- name: hotels_in_city_min_rating
-MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name:$city})
-WHERE coalesce(h.star_rating,0) >= $min_rating
-RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating LIMIT $limit
-
 -- name: hotel_by_name
 MATCH (h:Hotel) WHERE toLower(h.name) CONTAINS toLower($q)
 RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating LIMIT $limit
-
--- name: top_hotels
-MATCH (h:Hotel)
-RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating
-ORDER BY coalesce(h.star_rating,0) DESC LIMIT $limit
 
 -- name: hotels_by_country
 MATCH (h:Hotel)-[:LOCATED_IN]->(c:City)-[:LOCATED_IN]->(country:Country {name:$country})
