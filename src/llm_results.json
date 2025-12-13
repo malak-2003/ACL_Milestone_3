@@ -1,0 +1,14 @@
+{
+  "query": "Find good hotels in Cairo with a pool",
+  "retrieval_stats": {
+    "total_nodes": 3,
+    "total_reviews": 2,
+    "source_breakdown": {
+      "baseline_only": 1,
+      "embeddings_only": 1,
+      "both": 1
+    }
+  },
+  "context": "Hotel ID: hotel_1\nName: Cairo Horizon Hotel\nCity: Cairo, Egypt\nRating: 4.6/5\nAmenities: wifi, pool, breakfast\nDescription: A modern hotel with Nile views. [Retrieved via: both, similarity: 0.92]\n\nHotel ID: hotel_2\nName: Nile Pearl Inn\nCity: Cairo, Egypt\nRating: 4.3/5\nAmenities: wifi, pool\nDescription: Affordable hotel near downtown Cairo. [Retrieved via: baseline]\n\nHotel ID: hotel_3\nName: Pyramids View Resort\nCity: Cairo, Egypt\nRating: 4.5/5\nAmenities: pool, spa, wifi\nDescription: Luxury resort with pyramid views and excellent pool facilities. [Retrieved via: embeddings, similarity: 0.88]\n\n\n--- Relationships ---\n\nhotel_1 --[LOCATED_IN]--> Cairo\n\nhotel_2 --[LOCATED_IN]--> Cairo\n\n\n--- Reviews ---\n\nReview for Hotel hotel_1: \"Amazing view and very clean rooms.\" (Score: 5/5)\n\nReview for Hotel hotel_2: \"Good value for money but breakfast is limited.\" (Score: 4/5)",
+  "models": []
+}
