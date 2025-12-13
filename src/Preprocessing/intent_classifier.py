@@ -17,7 +17,7 @@ print(os.getenv("HF_TOKEN"))  # should print your token, not None
 
 client = InferenceClient(
     model="google/gemma-2-2b-it",
-    token="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"
+    token=HF_TOKEN
 )
 
 # Minimal test call

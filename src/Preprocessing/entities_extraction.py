@@ -1,15 +1,3 @@
-
-"""
-entities.py
--------------
-Extract relevant entities from user queries for the hotel domain:
-- Hotels (from dataset)
-- Cities (NER)
-- Countries (NER)
-- Traveler types / demographics (predefined list)
-- Age patterns extraction (returns numbers only)
-"""
-
 import pandas as pd
 from pathlib import Path
 import spacy
