@@ -709,7 +709,8 @@ HF_API_KEY = os.getenv("HF_API_KEY")
 FREE_MODELS = {
     "Llama-3.2-3B": "meta-llama/Llama-3.2-3B-Instruct",
     "Llama-3.2-1B": "meta-llama/Llama-3.2-1B-Instruct",
-    "Qwen-2.5-7B": "Qwen/Qwen2.5-7B-Instruct"
+    "Qwen-2.5-7B": "Qwen/Qwen2.5-7B-Instruct",
+    "Gemma-2B": "google/gemma-2-2b-it",                  # Safety-focused
 }
 
 
@@ -777,7 +778,6 @@ def format_context(nodes: List[Dict], relationships: List[Dict], reviews: List[D
 Name: {node.get('name')}
 City: {node.get('city')}, {node.get('country')}
 Rating: {node.get('rating')}/5
-Amenities: {', '.join(node.get('amenities', []))}
 Description: {node.get('description')}{source_info}""")
     
     if relationships:
@@ -933,8 +933,207 @@ def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
     }
 
 
+# def print_detailed_comparison(result: Dict):
+#     """Print comprehensive comparison report."""
+    
+#     print("\n" + "="*80)
+#     print("COMPREHENSIVE LLM COMPARISON REPORT")
+#     print("="*80)
+    
+#     print(f"\n📝 USER QUERY: {result['query']}")
+#     print(f"\n📊 RETRIEVAL STATISTICS:")
+#     stats = result['retrieval_stats']
+#     print(f"   Total Nodes Retrieved: {stats['total_nodes']}")
+#     print(f"   Total Reviews: {stats['total_reviews']}")
+#     print(f"   Source Breakdown:")
+#     for source, count in stats['source_breakdown'].items():
+#         print(f"      - {source}: {count}")
+    
+#     print("\n" + "="*80)
+#     print("MODEL RESPONSES & ANALYSIS")
+#     print("="*80)
+    
+#     successful = []
+    
+#     for model_name, output in result["results"].items():
+#         print(f"\n{'─'*80}")
+#         print(f"🤖 MODEL: {model_name}")
+#         print(f"   ID: {output['model_id']}")
+        
+#         if output["status"] == "success":
+#             successful.append(model_name)
+#             metrics = output['quality_metrics']
+            
+#             print(f"\n⏱️  QUANTITATIVE METRICS:")
+#             print(f"   Response Time: {output['response_time']}s")
+#             print(f"   Answer Length: {metrics['length_words']} words")
+#             print(f"   Entity Coverage: {metrics['coverage']:.2%} ({metrics['hotels_mentioned']}/{metrics['hotels_in_context']} hotels)")
+#             print(f"   Query Relevance: {metrics['query_relevance']:.2%}")
+#             print(f"   Overall Quality Score: {metrics['overall_quality']:.2%}")
+            
+#             print(f"\n📈 QUALITATIVE INDICATORS:")
+#             print(f"   ✅ Mentions Ratings: {'Yes' if metrics['mentions_ratings'] else 'No'}")
+#             print(f"   ✅ Mentions Amenities: {'Yes' if metrics['mentions_amenities'] else 'No'}")
+#             print(f"   ✅ Provides Comparison: {'Yes' if metrics['provides_comparison'] else 'No'}")
+            
+#             print(f"\n📄 ANSWER:")
+#             print(output["answer"])
+#         else:
+#             print(f"   ❌ ERROR: {output['error'][:200]}")
+    
+#     # Comparative analysis
+#     if len(successful) >= 2:
+#         print("\n" + "="*80)
+#         print("COMPARATIVE ANALYSIS")
+#         print("="*80)
+        
+#         times = {m: result["results"][m]["response_time"] for m in successful}
+#         fastest = min(times, key=times.get)
+        
+#         print(f"\n⚡ SPEED RANKING:")
+#         sorted_by_speed = sorted(times.items(), key=lambda x: x[1])
+#         for i, (model, time_val) in enumerate(sorted_by_speed, 1):
+#             print(f"   {i}. {model}: {time_val}s")
+        
+#         qualities = {m: result["results"][m]["quality_metrics"]["overall_quality"] for m in successful}
+#         best_quality = max(qualities, key=qualities.get)
+        
+#         print(f"\n🏆 QUALITY RANKING:")
+#         sorted_by_quality = sorted(qualities.items(), key=lambda x: x[1], reverse=True)
+#         for i, (model, quality) in enumerate(sorted_by_quality, 1):
+#             print(f"   {i}. {model}: {quality:.2%}")
+        
+#         print(f"\n🎯 RECOMMENDATION:")
+#         if fastest == best_quality:
+#             print(f"   Use {fastest} - Best in both speed and quality!")
+#         else:
+#             print(f"   For Speed: Use {fastest}")
+#             print(f"   For Quality: Use {best_quality}")
+
+
+def evaluate_answer_quality(answer: str, query: str, context: str) -> Dict:
+    """
+    Comprehensive evaluation with both quantitative and qualitative metrics.
+    
+    Quantitative: Length, coverage, relevance, token usage
+    Qualitative: Correctness, naturalness, helpfulness
+    """
+    import re
+    
+    metrics = {}
+    
+    # ============================================
+    # QUANTITATIVE METRICS
+    # ============================================
+    
+    # 1. Length metrics
+    metrics["length_words"] = len(answer.split())
+    metrics["length_chars"] = len(answer)
+    metrics["length_sentences"] = max(1, answer.count('.') + answer.count('!') + answer.count('?'))
+    
+    # 2. Token usage estimation (approximate: 1 token ≈ 4 chars)
+    metrics["estimated_tokens"] = len(answer) // 4
+    
+    # 3. Entity coverage (how many hotels mentioned)
+    context_hotels = set()
+    for line in context.split('\n'):
+        if line.startswith('Name:'):
+            hotel_name = line.replace('Name:', '').strip()
+            context_hotels.add(hotel_name.lower())
+    
+    answer_lower = answer.lower()
+    mentioned_hotels = [h for h in context_hotels if h in answer_lower]
+    
+    metrics["hotels_in_context"] = len(context_hotels)
+    metrics["hotels_mentioned"] = len(mentioned_hotels)
+    metrics["coverage"] = len(mentioned_hotels) / len(context_hotels) if context_hotels else 0
+    
+    # 4. Query relevance (keyword overlap)
+    query_terms = set(query.lower().split())
+    answer_terms = set(answer.lower().split())
+    overlap = query_terms & answer_terms
+    metrics["query_relevance"] = len(overlap) / len(query_terms) if query_terms else 0
+    
+    # 5. Information density (words per sentence)
+    metrics["info_density"] = metrics["length_words"] / metrics["length_sentences"]
+    
+    # ============================================
+    # QUALITATIVE INDICATORS (Automated)
+    # ============================================
+    
+    # 6. Correctness indicators
+    metrics["mentions_ratings"] = "rating" in answer.lower() or "/5" in answer
+    metrics["mentions_location"] = any(word in answer.lower() for word in ['city', 'location', 'near', 'cairo', 'egypt'])
+    metrics["provides_comparison"] = any(word in answer.lower() for word in ['both', 'compare', 'better', 'higher', 'vs', 'whereas'])
+    
+    # 7. Grounding check
+    context_lower = context.lower()
+    answer_numbers = re.findall(r'\b\d+\.?\d*\b', answer)
+    context_numbers = re.findall(r'\b\d+\.?\d*\b', context)
+    
+    grounded_numbers = sum(1 for num in answer_numbers if num in context_numbers)
+    metrics["grounding_score"] = grounded_numbers / len(answer_numbers) if answer_numbers else 1.0
+    
+    # 8. Naturalness indicators
+    metrics["uses_natural_language"] = not answer.startswith('{') and not answer.startswith('[')
+    metrics["has_conclusion"] = any(word in answer.lower() for word in ['therefore', 'overall', 'in summary', 'recommend', 'suggest'])
+    metrics["conversational_tone"] = any(word in answer for word in ['I', 'you', 'your', 'would', 'should'])
+    
+    # 9. Helpfulness indicators
+    metrics["actionable"] = any(word in answer.lower() for word in ['recommend', 'suggest', 'consider', 'choose', 'best'])
+    metrics["provides_reasoning"] = any(word in answer.lower() for word in ['because', 'since', 'due to', 'as', 'given'])
+    metrics["handles_uncertainty"] = any(phrase in answer.lower() for phrase in 
+                                          ["don't have", "not available", "cannot determine", "unclear", "not enough"])
+    
+    # 10. Answer completeness
+    if metrics["length_words"] < 10:
+        metrics["completeness"] = "too_brief"
+    elif metrics["length_words"] > 200:
+        metrics["completeness"] = "too_verbose"
+    else:
+        metrics["completeness"] = "appropriate"
+    
+    # ============================================
+    # OVERALL SCORES
+    # ============================================
+    
+    # Accuracy score
+    accuracy_factors = [
+        metrics["grounding_score"],
+        metrics["coverage"],
+        1.0 if metrics["mentions_ratings"] else 0.5,
+        1.0 if metrics["mentions_location"] else 0.5,
+    ]
+    metrics["accuracy_score"] = sum(accuracy_factors) / len(accuracy_factors)
+    
+    # Relevance score
+    relevance_factors = [
+        metrics["query_relevance"],
+        metrics["coverage"],
+        1.0 if metrics["actionable"] else 0.5,
+    ]
+    metrics["relevance_score"] = sum(relevance_factors) / len(relevance_factors)
+    
+    # Naturalness score
+    naturalness_factors = [
+        1.0 if metrics["uses_natural_language"] else 0.0,
+        1.0 if metrics["conversational_tone"] else 0.5,
+        1.0 if metrics["has_conclusion"] else 0.5,
+        1.0 if metrics["completeness"] == "appropriate" else 0.5,
+    ]
+    metrics["naturalness_score"] = sum(naturalness_factors) / len(naturalness_factors)
+    
+    # Overall quality score (weighted average)
+    metrics["overall_quality"] = (
+        metrics["accuracy_score"] * 0.4 +
+        metrics["relevance_score"] * 0.3 +
+        metrics["naturalness_score"] * 0.3
+    )
+    
+    return metrics
+
 def print_detailed_comparison(result: Dict):
-    """Print comprehensive comparison report."""
+    """Print comprehensive comparison report with all metrics."""
     
     print("\n" + "="*80)
     print("COMPREHENSIVE LLM COMPARISON REPORT")
@@ -964,53 +1163,316 @@ def print_detailed_comparison(result: Dict):
             successful.append(model_name)
             metrics = output['quality_metrics']
             
-            print(f"\n⏱️  QUANTITATIVE METRICS:")
+            # ============================================
+            # QUANTITATIVE METRICS
+            # ============================================
+            print(f"\n📊 QUANTITATIVE METRICS:")
             print(f"   Response Time: {output['response_time']}s")
-            print(f"   Answer Length: {metrics['length_words']} words")
+            print(f"   Token Usage (estimated): ~{metrics['estimated_tokens']} tokens")
+            print(f"   Answer Length: {metrics['length_words']} words, {metrics['length_sentences']} sentences")
+            print(f"   Information Density: {metrics['info_density']:.1f} words/sentence")
             print(f"   Entity Coverage: {metrics['coverage']:.2%} ({metrics['hotels_mentioned']}/{metrics['hotels_in_context']} hotels)")
             print(f"   Query Relevance: {metrics['query_relevance']:.2%}")
-            print(f"   Overall Quality Score: {metrics['overall_quality']:.2%}")
+            print(f"   Grounding Score: {metrics['grounding_score']:.2%}")
             
+            # ============================================
+            # QUALITATIVE INDICATORS
+            # ============================================
             print(f"\n📈 QUALITATIVE INDICATORS:")
-            print(f"   ✅ Mentions Ratings: {'Yes' if metrics['mentions_ratings'] else 'No'}")
-            print(f"   ✅ Mentions Amenities: {'Yes' if metrics['mentions_amenities'] else 'No'}")
-            print(f"   ✅ Provides Comparison: {'Yes' if metrics['provides_comparison'] else 'No'}")
+            print(f"   Accuracy Score: {metrics['accuracy_score']:.2%}")
+            print(f"   Relevance Score: {metrics['relevance_score']:.2%}")
+            print(f"   Naturalness Score: {metrics['naturalness_score']:.2%}")
+            print(f"   Overall Quality: {metrics['overall_quality']:.2%}")
+            
+            print(f"\n✅ CORRECTNESS:")
+            print(f"   • Mentions Ratings: {'Yes' if metrics['mentions_ratings'] else 'No'}")
+            print(f"   • Mentions Location: {'Yes' if metrics['mentions_location'] else 'No'}")
+            print(f"   • Provides Comparison: {'Yes' if metrics['provides_comparison'] else 'No'}")
+            print(f"   • Grounded in Context: {metrics['grounding_score']:.0%}")
+            
+            print(f"\n💬 NATURALNESS:")
+            print(f"   • Natural Language: {'Yes' if metrics['uses_natural_language'] else 'No'}")
+            print(f"   • Conversational Tone: {'Yes' if metrics['conversational_tone'] else 'No'}")
+            print(f"   • Has Conclusion: {'Yes' if metrics['has_conclusion'] else 'No'}")
+            print(f"   • Completeness: {metrics['completeness'].replace('_', ' ').title()}")
+            
+            print(f"\n🎯 HELPFULNESS:")
+            print(f"   • Actionable Advice: {'Yes' if metrics['actionable'] else 'No'}")
+            print(f"   • Provides Reasoning: {'Yes' if metrics['provides_reasoning'] else 'No'}")
+            print(f"   • Handles Uncertainty: {'Yes' if metrics['handles_uncertainty'] else 'No'}")
             
             print(f"\n📄 ANSWER:")
             print(output["answer"])
         else:
             print(f"   ❌ ERROR: {output['error'][:200]}")
     
-    # Comparative analysis
+    # ============================================
+    # COMPARATIVE ANALYSIS
+    # ============================================
     if len(successful) >= 2:
         print("\n" + "="*80)
         print("COMPARATIVE ANALYSIS")
         print("="*80)
         
+        # Speed ranking
         times = {m: result["results"][m]["response_time"] for m in successful}
         fastest = min(times, key=times.get)
+        slowest = max(times, key=times.get)
         
         print(f"\n⚡ SPEED RANKING:")
         sorted_by_speed = sorted(times.items(), key=lambda x: x[1])
         for i, (model, time_val) in enumerate(sorted_by_speed, 1):
             print(f"   {i}. {model}: {time_val}s")
         
-        qualities = {m: result["results"][m]["quality_metrics"]["overall_quality"] for m in successful}
-        best_quality = max(qualities, key=qualities.get)
+        # Token usage ranking
+        tokens = {m: result["results"][m]["quality_metrics"]["estimated_tokens"] for m in successful}
+        most_tokens = max(tokens, key=tokens.get)
+        least_tokens = min(tokens, key=tokens.get)
         
-        print(f"\n🏆 QUALITY RANKING:")
+        print(f"\n🔢 TOKEN USAGE:")
+        sorted_by_tokens = sorted(tokens.items(), key=lambda x: x[1])
+        for i, (model, token_count) in enumerate(sorted_by_tokens, 1):
+            print(f"   {i}. {model}: ~{token_count} tokens")
+        
+        # Quality rankings
+        print(f"\n🏆 QUALITY RANKINGS:")
+        
+        # Overall quality
+        qualities = {m: result["results"][m]["quality_metrics"]["overall_quality"] for m in successful}
+        print(f"\n   Overall Quality:")
         sorted_by_quality = sorted(qualities.items(), key=lambda x: x[1], reverse=True)
         for i, (model, quality) in enumerate(sorted_by_quality, 1):
             print(f"   {i}. {model}: {quality:.2%}")
+        best_quality = sorted_by_quality[0][0]
         
-        print(f"\n🎯 RECOMMENDATION:")
+        # Accuracy
+        accuracies = {m: result["results"][m]["quality_metrics"]["accuracy_score"] for m in successful}
+        print(f"\n   Accuracy:")
+        sorted_by_accuracy = sorted(accuracies.items(), key=lambda x: x[1], reverse=True)
+        for i, (model, acc) in enumerate(sorted_by_accuracy, 1):
+            print(f"   {i}. {model}: {acc:.2%}")
+        most_accurate = sorted_by_accuracy[0][0]
+        
+        # Relevance
+        relevances = {m: result["results"][m]["quality_metrics"]["relevance_score"] for m in successful}
+        print(f"\n   Relevance:")
+        sorted_by_relevance = sorted(relevances.items(), key=lambda x: x[1], reverse=True)
+        for i, (model, rel) in enumerate(sorted_by_relevance, 1):
+            print(f"   {i}. {model}: {rel:.2%}")
+        most_relevant = sorted_by_relevance[0][0]
+        
+        # Naturalness
+        naturalnesses = {m: result["results"][m]["quality_metrics"]["naturalness_score"] for m in successful}
+        print(f"\n   Naturalness:")
+        sorted_by_naturalness = sorted(naturalnesses.items(), key=lambda x: x[1], reverse=True)
+        for i, (model, nat) in enumerate(sorted_by_naturalness, 1):
+            print(f"   {i}. {model}: {nat:.2%}")
+        most_natural = sorted_by_naturalness[0][0]
+        
+        # ============================================
+        # COST ANALYSIS (Estimated)
+        # ============================================
+        print(f"\n💰 ESTIMATED COST ANALYSIS (if using paid API):")
+        print(f"   Note: These are FREE on HuggingFace, but here's what it would cost elsewhere:")
+        
+        # Typical pricing: ~$0.10-0.50 per 1M tokens for small models
+        for model in successful:
+            token_count = result["results"][model]["quality_metrics"]["estimated_tokens"]
+            # Rough estimate: smaller models = cheaper
+            if "1B" in model:
+                cost_per_1m = 0.10
+            elif "3B" in model:
+                cost_per_1m = 0.20
+            else:  # 7B+
+                cost_per_1m = 0.50
+            
+            estimated_cost = (token_count / 1_000_000) * cost_per_1m
+            print(f"   {model}: ${estimated_cost:.6f} per query (~${estimated_cost * 1000:.2f} per 1K queries)")
+        
+        # ============================================
+        # RECOMMENDATIONS
+        # ============================================
+        print(f"\n🎯 RECOMMENDATIONS:")
+        print(f"\n   Best Overall: {best_quality}")
+        print(f"   Fastest: {fastest} ({times[fastest]:.2f}s)")
+        print(f"   Most Accurate: {most_accurate} ({accuracies[most_accurate]:.2%})")
+        print(f"   Most Relevant: {most_relevant} ({relevances[most_relevant]:.2%})")
+        print(f"   Most Natural: {most_natural} ({naturalnesses[most_natural]:.2%})")
+        print(f"   Most Efficient (tokens): {least_tokens} (~{tokens[least_tokens]} tokens)")
+        
+        print(f"\n   💡 USE CASE RECOMMENDATIONS:")
+        print(f"   • Production (balanced): {best_quality}")
+        print(f"   • Speed-critical: {fastest}")
+        print(f"   • Quality-critical: {most_accurate}")
+        print(f"   • Cost-sensitive: {least_tokens}")
+        
+        # Trade-off analysis
+        print(f"\n   ⚖️  TRADE-OFF ANALYSIS:")
         if fastest == best_quality:
-            print(f"   Use {fastest} - Best in both speed and quality!")
+            print(f"   ✨ {fastest} is both fastest AND highest quality - IDEAL!")
         else:
-            print(f"   For Speed: Use {fastest}")
-            print(f"   For Quality: Use {best_quality}")
+            speed_diff = times[slowest] - times[fastest]
+            quality_diff = qualities[best_quality] - qualities[fastest]
+            print(f"   • {best_quality} is {quality_diff:.1%} better quality but {speed_diff:.2f}s slower")
+            print(f"   • {fastest} is {speed_diff:.2f}s faster but {quality_diff:.1%} lower quality")
+            
+            if quality_diff < 0.10:  # Less than 10% quality difference
+                print(f"   ➡️  Recommendation: Use {fastest} (quality difference is minimal)")
+            else:
+                print(f"   ➡️  Recommendation: Use {best_quality} for quality, {fastest} for speed")
 
 
+
+
+# ## 📋 **Complete Metrics Summary**
+
+# ### **Quantitative Metrics** ✅
+# | Metric | What it Measures | How |
+# |--------|------------------|-----|
+# | **Response Time** | Speed of answer generation | Actual time measurement |
+# | **Token Usage** | API cost/resource usage | Character count / 4 |
+# | **Answer Length** | Verbosity (words, sentences) | Word/sentence count |
+# | **Information Density** | Words per sentence | Words / sentences |
+# | **Entity Coverage** | How many hotels mentioned | Hotels mentioned / total |
+# | **Query Relevance** | Keyword overlap with query | Jaccard similarity |
+# | **Grounding Score** | Factual accuracy | Numbers in answer found in context |
+
+# ### **Qualitative Metrics** ✅
+# | Metric | What it Measures | How |
+# |--------|------------------|-----|
+# | **Accuracy Score** | Correctness of information | Grounding + coverage + facts |
+# | **Relevance Score** | How well it answers query | Query relevance + actionability |
+# | **Naturalness Score** | Human-like quality | Conversational + completeness |
+# | **Overall Quality** | Weighted combination | 40% accuracy + 30% relevance + 30% naturalness |
+# | **Correctness Indicators** | Mentions ratings, locations, etc | Keyword detection |
+# | **Naturalness Indicators** | Conversational tone, conclusions | Pattern matching |
+# | **Helpfulness Indicators** | Actionable advice, reasoning | Keyword detection |
+
+# ---
+
+# ## 🎯 **Sample Output**
+# ```
+# ================================================================================
+# COMPREHENSIVE LLM COMPARISON REPORT
+# ================================================================================
+
+# 📝 USER QUERY: Find hotels in Cairo with pools
+
+# 📊 RETRIEVAL STATISTICS:
+#    Total Nodes Retrieved: 3
+#    Total Reviews: 2
+#    Source Breakdown:
+#       - baseline_only: 1
+#       - embeddings_only: 1
+#       - both: 1
+
+# ================================================================================
+# MODEL RESPONSES & ANALYSIS
+# ================================================================================
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 🤖 MODEL: Llama-3.2-3B
+#    ID: meta-llama/Llama-3.2-3B-Instruct
+
+# 📊 QUANTITATIVE METRICS:
+#    Response Time: 1.23s
+#    Token Usage (estimated): ~187 tokens
+#    Answer Length: 75 words, 4 sentences
+#    Information Density: 18.8 words/sentence
+#    Entity Coverage: 66.67% (2/3 hotels)
+#    Query Relevance: 75.00%
+#    Grounding Score: 100.00%
+
+# 📈 QUALITATIVE INDICATORS:
+#    Accuracy Score: 87.50%
+#    Relevance Score: 80.56%
+#    Naturalness Score: 87.50%
+#    Overall Quality: 85.42%
+
+# ✅ CORRECTNESS:
+#    • Mentions Ratings: Yes
+#    • Mentions Location: Yes
+#    • Provides Comparison: Yes
+#    • Grounded in Context: 100%
+
+# 💬 NATURALNESS:
+#    • Natural Language: Yes
+#    • Conversational Tone: Yes
+#    • Has Conclusion: Yes
+#    • Completeness: Appropriate
+
+# 🎯 HELPFULNESS:
+#    • Actionable Advice: Yes
+#    • Provides Reasoning: Yes
+#    • Handles Uncertainty: No
+
+# 📄 ANSWER:
+# Based on the retrieved information, I found two hotels in Cairo with pools:
+# Nile Plaza (4.5/5 rating) and Cairo Grand (4.3/5). Nile Plaza has a higher
+# rating and is located near the Egyptian Museum. I recommend Nile Plaza for
+# its excellent rating and convenient location.
+
+# ================================================================================
+# COMPARATIVE ANALYSIS
+# ================================================================================
+
+# ⚡ SPEED RANKING:
+#    1. Llama-3.2-1B: 0.87s
+#    2. Llama-3.2-3B: 1.23s
+#    3. Qwen-2.5-7B: 3.45s
+
+# 🔢 TOKEN USAGE:
+#    1. Llama-3.2-1B: ~142 tokens
+#    2. Llama-3.2-3B: ~187 tokens
+#    3. Qwen-2.5-7B: ~215 tokens
+
+# 🏆 QUALITY RANKINGS:
+
+#    Overall Quality:
+#    1. Qwen-2.5-7B: 91.23%
+#    2. Llama-3.2-3B: 85.42%
+#    3. Llama-3.2-1B: 78.34%
+
+#    Accuracy:
+#    1. Qwen-2.5-7B: 93.75%
+#    2. Llama-3.2-3B: 87.50%
+#    3. Llama-3.2-1B: 81.25%
+
+#    Relevance:
+#    1. Qwen-2.5-7B: 88.89%
+#    2. Llama-3.2-3B: 80.56%
+#    3. Llama-3.2-1B: 75.00%
+
+#    Naturalness:
+#    1. Llama-3.2-3B: 87.50%
+#    2. Qwen-2.5-7B: 87.50%
+#    3. Llama-3.2-1B: 75.00%
+
+# # 💰 ESTIMATED COST ANALYSIS (if using paid API):
+# #    Note: These are FREE on HuggingFace, but here's what it would cost elsewhere:
+# #    Llama-3.2-1B: $0.000014 per query (~$0.01 per 1K queries)
+# #    Llama-3.2-3B: $0.000037 per query (~$0.04 per 1K queries)
+# #    Qwen-2.5-7B: $0.000108 per query (~$0.11 per 1K queries)
+
+# 🎯 RECOMMENDATIONS:
+
+#    Best Overall: Qwen-2.5-7B
+#    Fastest: Llama-3.2-1B (0.87s)
+#    Most Accurate: Qwen-2.5-7B (93.75%)
+#    Most Relevant: Qwen-2.5-7B (88.89%)
+#    Most Natural: Llama-3.2-3B (87.50%)
+#    Most Efficient (tokens): Llama-3.2-1B (~142 tokens)
+
+#    💡 USE CASE RECOMMENDATIONS:
+#    • Production (balanced): Qwen-2.5-7B
+#    • Speed-critical: Llama-3.2-1B
+#    • Quality-critical: Qwen-2.5-7B
+#    • Cost-sensitive: Llama-3.2-1B
+
+#    ⚖️  TRADE-OFF ANALYSIS:
+#    • Qwen-2.5-7B is 5.8% better quality but 2.58s slower
+#    • Llama-3.2-1B is 2.58s faster but 5.8% lower quality
+#    ➡️  Recommendation: Use Qwen-2.5-7B for quality, Llama-3.2-1B for speed
 if __name__ == "__main__":
     # Test data
     from example_retrieval_result import example_retrieval_result
