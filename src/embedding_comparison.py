@@ -1,10 +1,3 @@
-"""
-compare_embeddings.py
----------------------
-Comprehensive comparison script for embedding models.
-Generates quantitative and qualitative evaluation results for Milestone 3 presentation.
-"""
-
 import time
 import json
 from typing import List, Dict, Any

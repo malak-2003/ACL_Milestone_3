@@ -603,11 +603,11 @@ def format_entities_output(entities: Dict) -> str:
     
     if entities.get("age_numbers"):
         if len(entities["age_numbers"]) == 1:
-            output.append(f"🎂 Age: {entities['age_numbers'][0]} years")
+            output.append(f"Age: {entities['age_numbers'][0]} years")
         elif len(entities["age_numbers"]) == 2:
-            output.append(f"🎂 Age Range: {entities['age_numbers'][0]}-{entities['age_numbers'][1]} years")
+            output.append(f"Age Range: {entities['age_numbers'][0]}-{entities['age_numbers'][1]} years")
         else:
-            output.append(f"🎂 Ages: {', '.join(map(str, entities['age_numbers']))} years")
+            output.append(f"Ages: {', '.join(map(str, entities['age_numbers']))} years")
     
     return "\n".join(output) if output else "❌ No entities detected"
 
@@ -623,6 +623,31 @@ if __name__ == "__main__":
     
     # Initialize extractor
     extractor = EnhancedEntityExtractor()
+    print("=" * 100)
+    print("GENDER EXTRACTION TESTING - FIXED VERSION")
+    print("=" * 100)
+    
+    for i, q in enumerate(gender_test_queries, 1):
+        print(f"\n{'='*80}")
+        print(f"TEST {i:02d}: {q}")
+        print(f"{'='*80}")
+        
+        entities = extract_entities(q)
+        
+        # Show gender extraction specifically
+        print(f"\nGender Extraction:")
+        print(f"  Query contains 'man': {'man' in q.lower()}")
+        print(f"  Query contains 'woman': {'woman' in q.lower()}")
+        print(f"  Extracted genders: {entities['gender']}")
+        
+        formatted_output = format_entities_output(entities)
+        print(f"\nAll Entities:")
+        print(formatted_output)
+    
+    # Original test queries for completeness
+    print(f"\n{'='*100}")
+    print("ORIGINAL TEST QUERIES - AGE EXTRACTION")
+    print(f"{'='*100}")
     
     # Test queries specifically designed to test the confusion cases
     test_queries = [
