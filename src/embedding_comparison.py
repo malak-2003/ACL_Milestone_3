@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any
 from pathlib import Path
 import numpy as np
-from node_embeddings import EmbeddingRetriever, NodeEmbeddingGenerator
+from embeddings_retreiver import EmbeddingRetriever, NodeEmbeddingGenerator
 
 
 def load_config(path="data/config.txt"):

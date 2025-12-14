@@ -207,12 +207,19 @@ class HotelKGBuilder:
         with self.driver.session() as session, open(reviews_csv, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                review_id = row["review_id"]
-                user_id = row["user_id"]
-                hotel_id = row["hotel_id"]
+                review_id = row.get("review_id")
+                user_id = row.get("user_id")
+                hotel_id = row.get("hotel_id")
 
-                text = row.get("text")
-                date = row.get("date")
+                # read both possible header names, prefer the explicit CSV names
+                review_text = row.get("review_text") or row.get("text") or None
+                review_date = row.get("review_date") or row.get("date") or None
+
+                # normalize empty strings to None
+                if isinstance(review_text, str) and review_text.strip() == "":
+                    review_text = None
+                if isinstance(review_date, str) and review_date.strip() == "":
+                    review_date = None
 
                 score_overall = to_float(row.get("score_overall"))
                 score_cleanliness = to_float(row.get("score_cleanliness"))
@@ -222,12 +229,14 @@ class HotelKGBuilder:
                 score_staff = to_float(row.get("score_staff"))
                 score_value_for_money = to_float(row.get("score_value_for_money"))
 
-                # Review node
+                # Create / update Review node — set both naming variants for compatibility
                 session.run(
                     """
                     MERGE (r:Review {review_id: $review_id})
-                    SET r.text = $text,
-                        r.date = $date,
+                    SET r.review_text = $review_text,
+                        r.review_date = $review_date,
+                        r.text = coalesce($review_text, $text),
+                        r.date = coalesce($review_date, $date),
                         r.score_overall = $score_overall,
                         r.score_cleanliness = $score_cleanliness,
                         r.score_comfort = $score_comfort,
@@ -237,8 +246,10 @@ class HotelKGBuilder:
                         r.score_value_for_money = $score_value_for_money
                     """,
                     review_id=review_id,
-                    text=text,
-                    date=date,
+                    review_text=review_text,
+                    review_date=review_date,
+                    text=row.get("text"),
+                    date=row.get("date"),
                     score_overall=score_overall,
                     score_cleanliness=score_cleanliness,
                     score_comfort=score_comfort,
@@ -265,7 +276,6 @@ class HotelKGBuilder:
                     hotel_id=hotel_id,
                     review_id=review_id,
                 )
-
     # ----- Import from visa.csv -----
 
     def import_visas(self, visa_csv="data/visa.csv"):

@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import Dict, Any, List
 import json
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from baseline_retreiver import BaselineRetriever
-from Preprocessing.entities_extraction import extract_entities, format_entities_output
-from Preprocessing.intent_classifier import hybrid_intent_detection
-
+from Preprocessing.entities_extraction import EnhancedEntityExtractor, format_entities_output
+from Preprocessing.intent_classifier import hybrid_intent_detection, refine_intent_with_entities
 
 class HotelSearchPipeline:
     def __init__(self, config_path: str = None, queries_path: str = None):
@@ -24,17 +26,13 @@ class HotelSearchPipeline:
         except Exception as e:
             print(f"Failed to initialize retriever: {e}")
             raise
-        
-        self.intent_entity_map = {
-            "hotel_search": ["city", "country", "hotel_name", "min_rating"],
-            "hotel_details": ["hotel_name", "hotel_id"],
-            "hotel_reviews": ["hotel_id", "hotel_name"],
-            "hotel_recommendation": ["city", "country", "min_rating"],
-            "amenity_filtering": ["facility", "min_facility_score"],
-            "location_query": ["city", "country"],
-            "visa_requirements": ["country_from", "country_to"],
-            "general_question": ["city", "hotel_name"],
-        }
+
+        try:
+            self.extractor = EnhancedEntityExtractor()
+            print("EnhancedEntityExtractor initialized")
+        except Exception as e:
+            print("Failed to initialize EnhancedEntityExtractor:", e)
+            self.extractor = None
     
     def close(self):
         if hasattr(self, 'retriever'):
@@ -42,170 +40,50 @@ class HotelSearchPipeline:
     
     def extract_intent(self, query: str) -> Dict[str, Any]:
         print("\nStep 1: Classifying Intent...")
-        
-        query_lower = query.lower()
-        visa_keywords = ["visa", "passport", "entry requirement", "travel document", 
-                        "need a visa", "require a visa", "visa requirement"]
-        
-        if any(keyword in query_lower for keyword in visa_keywords):
-            result = {
-                "intent": "visa_requirements",
-                "reason": "Query contains visa-related keywords",
-                "method": "rule_based_visa"
-            }
-        else:
-            result = hybrid_intent_detection(query)
-        
+        result = hybrid_intent_detection(query)
         intent = result.get("intent", "unknown")
-        reason = result.get("reason", "No reason provided")
         method = result.get("method", "unknown")
-        
-        print(f"   Intent: {intent}")
-        print(f"   Method: {method}")
-        print(f"   Reason: {reason}")
-        
+        reason = result.get("reason", "No reason provided")
+        print(f"   Initial intent: {intent} (method={method}) - {reason}")
         return result
-    
+
     def extract_entities_from_query(self, query: str) -> Dict[str, Any]:
         print("\nStep 2: Extracting Entities...")
-        entities = extract_entities(query)
-        
+
+        if self.extractor:
+            entities = self.extractor.extract_all(query)
+        else:
+            entities = {
+                "hotels": [], "cities": [], "countries": [], "traveler_types": [],
+                "facilities": [], "facility_ratings": {}, "nationality": [],
+                "age_numbers": [], "gender": [], "star_rating": None, "min_rating": None,
+                "min_facility_score": None, "min_reviews": None, "limit": 5
+            }
+
         formatted = format_entities_output(entities)
-        if formatted != "No entities detected":
+        if not formatted.startswith("No entities detected"):
             print(f"\n{formatted}")
         else:
             print("   No entities detected")
         
         return entities
-    
+
     def map_entities_to_params(self, intent: str, entities: Dict[str, Any], query: str) -> Dict[str, Any]:
         print("\nStep 3: Mapping Entities to Query Parameters...")
         
-        params = {}
+        if self.extractor:
+            params = self.extractor.map_entities_to_params(intent, entities, query)
+        else:
+            params = {}
+            params["limit"] = entities.get("limit", 5)
         
-        if intent == "visa_requirements":
-            if entities.get("nationality"):
-                nationality = entities["nationality"][0]
-                country_from = self.nationality_to_country(nationality)
-                params["from"] = country_from
-                print(f"   From Country (nationality): {country_from}")
-            
-            if entities.get("countries"):
-                params["to"] = entities["countries"][0].title()
-                print(f"   To Country: {params['to']}")
-            
-            if len(entities.get("countries", [])) >= 2 and not params.get("from"):
-                params["from"] = entities["countries"][0].title()
-                params["to"] = entities["countries"][1].title()
-                print(f"   From Country: {params['from']}")
-                print(f"   To Country: {params['to']}")
-            
-            return params
+        for key, value in params.items():
+            print(f"   {key}: {value}")
         
-        if entities.get("cities"):
-            params["city"] = entities["cities"][0].title()
-            print(f"   City: {params['city']}")
-        
-        if entities.get("countries"):
-            params["country"] = entities["countries"][0].title()
-            print(f"   Country: {params['country']}")
-        
-        if entities.get("hotels"):
-            params["hotel_name"] = entities["hotels"][0]
-            print(f"   Hotel: {params['hotel_name']}")
-        
-        if entities.get("traveler_types"):
-            params["traveler_type"] = entities["traveler_types"][0]
-            print(f"   Traveler Type: {params['traveler_type']}")
-        
-        if entities.get("gender"):
-            params["gender"] = entities["gender"][0]
-            print(f"   Gender: {params['gender']}")
-        
-        if entities.get("age_numbers"):
-            if len(entities["age_numbers"]) == 1:
-                params["age"] = entities["age_numbers"][0]
-                print(f"   Age: {params['age']}")
-            elif len(entities["age_numbers"]) >= 2:
-                params["age_min"] = min(entities["age_numbers"])
-                params["age_max"] = max(entities["age_numbers"])
-                print(f"   Age Range: {params['age_min']}-{params['age_max']}")
-        
-        params["limit"] = 5
-        
-        if not params or params == {"limit": 5}:
+        if not params or (len(params) == 1 and "limit" in params):
             print("   No specific parameters extracted, using defaults")
         
         return params
-    
-    def nationality_to_country(self, nationality: str) -> str:
-        nationality_map = {
-            "indian": "India",
-            "indians": "India",
-            "egyptian": "Egypt",
-            "egyptians": "Egypt",
-            "american": "United States",
-            "americans": "United States",
-            "british": "United Kingdom",
-            "french": "France",
-            "german": "Germany",
-            "chinese": "China",
-            "japanese": "Japan",
-            "italian": "Italy",
-            "spanish": "Spain",
-            "canadian": "Canada",
-            "australian": "Australia",
-            "brazilian": "Brazil",
-            "mexican": "Mexico",
-            "russian": "Russia",
-            "saudi": "Saudi Arabia",
-            "emirati": "United Arab Emirates",
-            "turkish": "Turkey",
-            "thai": "Thailand",
-            "korean": "South Korea",
-            "vietnamese": "Vietnam",
-            "indonesian": "Indonesia",
-            "malaysian": "Malaysia",
-            "singaporean": "Singapore",
-            "filipino": "Philippines",
-            "pakistani": "Pakistan",
-            "bangladeshi": "Bangladesh",
-            "nigerian": "Nigeria",
-            "south african": "South Africa",
-            "kenyan": "Kenya",
-            "moroccan": "Morocco",
-            "algerian": "Algeria",
-            "tunisian": "Tunisia",
-            "jordanian": "Jordan",
-            "lebanese": "Lebanon",
-            "iraqi": "Iraq",
-            "iranian": "Iran",
-            "israeli": "Israel",
-            "greek": "Greece",
-            "portuguese": "Portugal",
-            "dutch": "Netherlands",
-            "belgian": "Belgium",
-            "swiss": "Switzerland",
-            "austrian": "Austria",
-            "swedish": "Sweden",
-            "norwegian": "Norway",
-            "danish": "Denmark",
-            "finnish": "Finland",
-            "polish": "Poland",
-            "ukrainian": "Ukraine",
-            "czech": "Czech Republic",
-            "hungarian": "Hungary",
-            "romanian": "Romania",
-            "argentine": "Argentina",
-            "argentinian": "Argentina",
-            "chilean": "Chile",
-            "colombian": "Colombia",
-            "peruvian": "Peru",
-            "venezuelan": "Venezuela",
-        }
-        
-        key = nationality.lower().strip()
-        return nationality_map.get(key, nationality.title())
     
     def normalize_intent(self, intent: str) -> str:
         intent_mapping = {
@@ -217,10 +95,17 @@ class HotelSearchPipeline:
             "location_query": "hotel_search",
             "visa_requirements": "visa_query",
             "general_question": "hotel_search",
+            "traveller_query": "traveller_type_preferences",
+            "traveller_type_preferences": "traveller_type_preferences",
+            "hotels_with_min_reviews": "hotels_with_min_reviews",
+            "hotels_by_traveler_gender_age": "hotels_by_traveler_gender_age",
+            "hotels_by_score_range": "hotels_by_score_range",
+            "best_value_hotels": "best_value_hotels",
+            "hotels_by_location_score": "hotels_by_location_score",
+            "hotels_with_best_staff": "hotels_with_best_staff"
         }
-        
         return intent_mapping.get(intent, "hotel_search")
-    
+
     def retrieve_results(self, intent: str, params: Dict[str, Any]) -> List[Dict]:
         print("\nStep 4: Querying Database...")
         
@@ -237,19 +122,11 @@ class HotelSearchPipeline:
     
     def format_results_structured(self, results: List[Dict], intent: str) -> Dict[str, Any]:
         if intent == "visa_requirements":
-            return {
-                "visa_info": results[0] if results else None
-            }
+            return {"visa_info": results[0] if results else None}
         elif intent in ["hotel_reviews", "review_lookup"]:
-            return {
-                "nodes": [],
-                "reviews": results
-            }
+            return {"nodes": [], "reviews": results}
         else:
-            return {
-                "nodes": results,
-                "reviews": []
-            }
+            return {"nodes": results, "reviews": []}
     
     def process_query(self, query: str) -> Dict[str, Any]:
         print(f"\n{'='*80}")
@@ -257,28 +134,27 @@ class HotelSearchPipeline:
         print(f"{'='*80}")
         
         intent_result = self.extract_intent(query)
-        intent = intent_result.get("intent", "unknown")
-        
-        if intent == "unknown":
-            return {
-                "query": query,
-                "baseline_results": {
-                    "nodes": [],
-                    "reviews": []
-                },
-                "error": "Could not determine query intent"
-            }
-        
+        raw_intent = intent_result.get("intent", "unknown")
         entities = self.extract_entities_from_query(query)
+        intent = refine_intent_with_entities(raw_intent, entities, query)
+        print(f"\n   Final intent (after refinement): {intent}")
         params = self.map_entities_to_params(intent, entities, query)
+
+        if intent == "hotel_reviews" and not params.get("hotel_id") and params.get("hotel_name"):
+            qname = params["hotel_name"]
+            try:
+                tpl = self.retriever.queries.get("hotel_by_name")
+                if tpl:
+                    hits = self.retriever.run_query(tpl, {"q": qname, "limit": 1})
+                    if hits:
+                        params["hotel_id"] = hits[0].get("hotel_id")
+                        print(f"   Resolved hotel_name '{qname}' -> hotel_id '{params['hotel_id']}'")
+            except Exception as e:
+                print(f"   Warning: failed to resolve hotel_name to id: {e}")
+
         results = self.retrieve_results(intent, params)
-        
         structured_results = self.format_results_structured(results, intent)
-        
-        output = {
-            "query": query,
-            "baseline_results": structured_results
-        }
+        output = {"query": query, "baseline_results": structured_results}
         
         print(f"\n{'='*80}")
         print(f"RESULTS ({len(results)} found)")
@@ -286,7 +162,6 @@ class HotelSearchPipeline:
         print(json.dumps(output, indent=2))
         
         return output
-
 
 def interactive_mode(config_path=None, queries_path=None):
     print("\n" + "="*80)
@@ -300,16 +175,12 @@ def interactive_mode(config_path=None, queries_path=None):
         while True:
             try:
                 query = input("\nEnter your query: ").strip()
-                
                 if not query:
                     continue
-                
                 if query.lower() in ['exit', 'quit', 'q']:
                     print("\nGoodbye!")
                     break
-                
                 pipeline.process_query(query)
-                
             except KeyboardInterrupt:
                 print("\n\nGoodbye!")
                 break
@@ -317,10 +188,8 @@ def interactive_mode(config_path=None, queries_path=None):
                 print(f"\nError processing query: {e}")
                 import traceback
                 traceback.print_exc()
-    
     finally:
         pipeline.close()
-
 
 def batch_mode(queries: List[str], config_path=None, queries_path=None):
     print("\n" + "="*80)
@@ -334,12 +203,9 @@ def batch_mode(queries: List[str], config_path=None, queries_path=None):
             print(f"\n\n{'#'*80}")
             print(f"# QUERY {i}/{len(queries)}")
             print(f"{'#'*80}")
-            
             pipeline.process_query(query)
-    
     finally:
         pipeline.close()
-
 
 def main():
     import argparse
@@ -370,7 +236,6 @@ def main():
     
     if args.mode == 'interactive':
         interactive_mode(config_path=args.config, queries_path=args.queries)
-    
     elif args.mode == 'batch':
         test_queries = [
             "Find me hotels in Cairo",
@@ -381,7 +246,6 @@ def main():
             "Show me hotels with good facilities in Tokyo",
         ]
         batch_mode(test_queries, config_path=args.config, queries_path=args.queries)
-    
     elif args.mode == 'demo':
         demo_queries = [
             "Find hotels in Cairo",
@@ -389,7 +253,6 @@ def main():
             "Do Egyptians need a visa to France?",
         ]
         batch_mode(demo_queries, config_path=args.config, queries_path=args.queries)
-
 
 if __name__ == "__main__":
     main()
