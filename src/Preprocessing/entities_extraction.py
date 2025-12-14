@@ -177,7 +177,7 @@ class EnhancedEntityExtractor:
         
         return facility_ratings
     
-    def extract_gender(self, query: str) -> List[str]:
+    def _extract_gender(self, query: str) -> List[str]:
         query_lower = query.lower()
         
         gender_patterns = [
@@ -196,7 +196,7 @@ class EnhancedEntityExtractor:
         
         return list(set(genders))
 
-    def extract_age_numbers(self, query: str) -> List[int]:
+    def _extract_age_numbers(self, query: str) -> List[int]:
         query_lower = query.lower()
         
         age_patterns = [
