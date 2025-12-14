@@ -70,7 +70,7 @@ LIMIT $limit
 
 -- name: hotels_by_traveler_gender_age
 MATCH (t:Traveller)-[:STAYED_AT]->(h:Hotel)
-WHERE toUpper(t.gender) = toUpper($gender)
+WHERE t.gender = $gender
   AND (
     t.age = toString($age)
     OR

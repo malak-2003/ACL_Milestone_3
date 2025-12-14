@@ -4,22 +4,33 @@ from pathlib import Path
 from typing import Dict, Any, List
 import json
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from baseline_retreiver import BaselineRetriever
-from Preprocessing.entities_extraction import extract_entities, format_entities_output
-from Preprocessing.intent_classifier import hybrid_intent_detection
-from embeddings_retreiver import EmbeddingRetriever, load_config
+from Preprocessing.entities_extraction import EnhancedEntityExtractor, format_entities_output
+from Preprocessing.intent_classifier import hybrid_intent_detection, refine_intent_with_entities
+
+try:
+    from embeddings_retreiver import EmbeddingRetriever
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+    print("Warning: embeddings_retreiver not available, running baseline only")
 
 
 class HybridHotelSearchPipeline:
     def __init__(self, config_path: str = None, queries_path: str = None):
         print("Initializing Hybrid Hotel Search Pipeline...")
         
-        if config_path is None:
-            config_path = "data/config.txt"
+        project_root = Path(__file__).resolve().parents[1]
         
-        uri, user, password = load_config(config_path)
+        if config_path is None:
+            config_path = str(project_root / "data" / "config.txt")
+        if queries_path is None:
+            queries_path = str(project_root / "data" / "queries.txt")
         
         try:
             self.baseline_retriever = BaselineRetriever(
@@ -31,71 +42,66 @@ class HybridHotelSearchPipeline:
             print(f"Failed to initialize baseline retriever: {e}")
             raise
         
-        try:
-            self.embedding_retriever_minilm = EmbeddingRetriever(uri, user, password, "minilm")
-            print("MiniLM Embedding Retriever initialized")
-        except Exception as e:
-            print(f"Failed to initialize MiniLM retriever: {e}")
-            raise
+        if EMBEDDINGS_AVAILABLE:
+            try:
+                from Create_kg import load_config
+                uri, user, password = load_config(config_path)
+                
+                self.embedding_retriever_minilm = EmbeddingRetriever(uri, user, password, "minilm")
+                print("MiniLM Embedding Retriever initialized")
+                
+                self.embedding_retriever_mpnet = EmbeddingRetriever(uri, user, password, "mpnet")
+                print("MPNet Embedding Retriever initialized")
+            except Exception as e:
+                print(f"Failed to initialize embedding retrievers: {e}")
+                self.embedding_retriever_minilm = None
+                self.embedding_retriever_mpnet = None
+        else:
+            self.embedding_retriever_minilm = None
+            self.embedding_retriever_mpnet = None
         
         try:
-            self.embedding_retriever_mpnet = EmbeddingRetriever(uri, user, password, "mpnet")
-            print("MPNet Embedding Retriever initialized")
+            self.extractor = EnhancedEntityExtractor()
+            print("EnhancedEntityExtractor initialized")
         except Exception as e:
-            print(f"Failed to initialize MPNet retriever: {e}")
-            raise
-        
-        self.intent_entity_map = {
-            "hotel_search": ["city", "country", "hotel_name", "min_rating"],
-            "hotel_details": ["hotel_name", "hotel_id"],
-            "hotel_reviews": ["hotel_id", "hotel_name"],
-            "hotel_recommendation": ["city", "country", "min_rating"],
-            "amenity_filtering": ["facility", "min_facility_score"],
-            "location_query": ["city", "country"],
-            "visa_requirements": ["country_from", "country_to"],
-            "general_question": ["city", "hotel_name"],
-        }
+            print("Failed to initialize EnhancedEntityExtractor:", e)
+            self.extractor = None
     
     def close(self):
         if hasattr(self, 'baseline_retriever'):
             self.baseline_retriever.close()
-        if hasattr(self, 'embedding_retriever_minilm'):
+        if hasattr(self, 'embedding_retriever_minilm') and self.embedding_retriever_minilm:
             self.embedding_retriever_minilm.close()
-        if hasattr(self, 'embedding_retriever_mpnet'):
+        if hasattr(self, 'embedding_retriever_mpnet') and self.embedding_retriever_mpnet:
             self.embedding_retriever_mpnet.close()
     
     def extract_intent(self, query: str) -> Dict[str, Any]:
         print("\nStep 1: Classifying Intent...")
-        
-        query_lower = query.lower()
-        visa_keywords = ["visa", "passport", "entry requirement", "travel document", 
-                        "need a visa", "require a visa", "visa requirement"]
-        
-        if any(keyword in query_lower for keyword in visa_keywords):
-            result = {
-                "intent": "visa_requirements",
-                "reason": "Query contains visa-related keywords",
-                "method": "rule_based_visa"
-            }
-        else:
-            result = hybrid_intent_detection(query)
-        
+        result = hybrid_intent_detection(query)
         intent = result.get("intent", "unknown")
-        reason = result.get("reason", "No reason provided")
         method = result.get("method", "unknown")
-        
-        print(f"   Intent: {intent}")
-        print(f"   Method: {method}")
-        print(f"   Reason: {reason}")
-        
+        reason = result.get("reason", "No reason provided")
+        print(f"   Initial intent: {intent} (method={method}) - {reason}")
         return result
     
     def extract_entities_from_query(self, query: str) -> Dict[str, Any]:
         print("\nStep 2: Extracting Entities...")
-        entities = extract_entities(query)
-        
+
+        if self.extractor:
+            entities = self.extractor.extract_all(query)
+        else:
+            entities = {
+                "hotels": [], "cities": [], "countries": [], "traveler_types": [],
+                "facilities": [], "facility_ratings": {}, "nationality": [],
+                "age_numbers": [], "gender": [], "star_rating": None, "min_rating": None,
+                "min_facility_score": None, "min_reviews": None, "limit": 1,
+                "min_score": None, "max_score": None, "min_location_score": None
+            }
+
+        entities["limit"] = 1
+
         formatted = format_entities_output(entities)
-        if formatted != "No entities detected":
+        if not formatted.startswith("No entities detected"):
             print(f"\n{formatted}")
         else:
             print("   No entities detected")
@@ -105,101 +111,27 @@ class HybridHotelSearchPipeline:
     def map_entities_to_params(self, intent: str, entities: Dict[str, Any], query: str) -> Dict[str, Any]:
         print("\nStep 3: Mapping Entities to Query Parameters...")
         
-        params = {}
+        if self.extractor:
+            params = self.extractor.map_entities_to_params(intent, entities, query)
+        else:
+            params = {}
         
-        if intent == "visa_requirements":
-            if entities.get("nationality"):
-                nationality = entities["nationality"][0]
-                country_from = self.nationality_to_country(nationality)
-                params["from"] = country_from
-                print(f"   From Country (nationality): {country_from}")
-            
-            if entities.get("countries"):
-                params["to"] = entities["countries"][0].title()
-                print(f"   To Country: {params['to']}")
-            
-            if len(entities.get("countries", [])) >= 2 and not params.get("from"):
-                params["from"] = entities["countries"][0].title()
-                params["to"] = entities["countries"][1].title()
-                print(f"   From Country: {params['from']}")
-                print(f"   To Country: {params['to']}")
-            
-            return params
+        params["limit"] = 1
         
-        if entities.get("cities"):
-            params["city"] = entities["cities"][0].title()
-            print(f"   City: {params['city']}")
+        if intent == "hotels_by_score_range":
+            params["min_score"] = entities.get("min_score", 0.0)
+            params["max_score"] = entities.get("max_score", 10.0)
         
-        if entities.get("countries"):
-            params["country"] = entities["countries"][0].title()
-            print(f"   Country: {params['country']}")
+        if intent == "hotels_by_location_score":
+            params["min_location_score"] = entities.get("min_location_score", 9.0)
         
-        if entities.get("hotels"):
-            params["hotel_name"] = entities["hotels"][0]
-            print(f"   Hotel: {params['hotel_name']}")
+        for key, value in params.items():
+            print(f"   {key}: {value}")
         
-        if entities.get("traveler_types"):
-            params["traveler_type"] = entities["traveler_types"][0]
-            print(f"   Traveler Type: {params['traveler_type']}")
-        
-        if entities.get("gender"):
-            params["gender"] = entities["gender"][0]
-            print(f"   Gender: {params['gender']}")
-        
-        if entities.get("age_numbers"):
-            if len(entities["age_numbers"]) == 1:
-                params["age"] = entities["age_numbers"][0]
-                print(f"   Age: {params['age']}")
-            elif len(entities["age_numbers"]) >= 2:
-                params["age_min"] = min(entities["age_numbers"])
-                params["age_max"] = max(entities["age_numbers"])
-                print(f"   Age Range: {params['age_min']}-{params['age_max']}")
-        
-        params["limit"] = 5
-        
-        if not params or params == {"limit": 5}:
+        if not params or (len(params) == 1 and "limit" in params):
             print("   No specific parameters extracted, using defaults")
         
         return params
-    
-    def nationality_to_country(self, nationality: str) -> str:
-        nationality_map = {
-            "indian": "India", "indians": "India",
-            "egyptian": "Egypt", "egyptians": "Egypt",
-            "american": "United States", "americans": "United States",
-            "british": "United Kingdom",
-            "french": "France", "german": "Germany",
-            "chinese": "China", "japanese": "Japan",
-            "italian": "Italy", "spanish": "Spain",
-            "canadian": "Canada", "australian": "Australia",
-            "brazilian": "Brazil", "mexican": "Mexico",
-            "russian": "Russia", "saudi": "Saudi Arabia",
-            "emirati": "United Arab Emirates",
-            "turkish": "Turkey", "thai": "Thailand",
-            "korean": "South Korea", "vietnamese": "Vietnam",
-            "indonesian": "Indonesia", "malaysian": "Malaysia",
-            "singaporean": "Singapore", "filipino": "Philippines",
-            "pakistani": "Pakistan", "bangladeshi": "Bangladesh",
-            "nigerian": "Nigeria", "south african": "South Africa",
-            "kenyan": "Kenya", "moroccan": "Morocco",
-            "algerian": "Algeria", "tunisian": "Tunisia",
-            "jordanian": "Jordan", "lebanese": "Lebanon",
-            "iraqi": "Iraq", "iranian": "Iran",
-            "israeli": "Israel", "greek": "Greece",
-            "portuguese": "Portugal", "dutch": "Netherlands",
-            "belgian": "Belgium", "swiss": "Switzerland",
-            "austrian": "Austria", "swedish": "Sweden",
-            "norwegian": "Norway", "danish": "Denmark",
-            "finnish": "Finland", "polish": "Poland",
-            "ukrainian": "Ukraine", "czech": "Czech Republic",
-            "hungarian": "Hungary", "romanian": "Romania",
-            "argentine": "Argentina", "argentinian": "Argentina",
-            "chilean": "Chile", "colombian": "Colombia",
-            "peruvian": "Peru", "venezuelan": "Venezuela",
-        }
-        
-        key = nationality.lower().strip()
-        return nationality_map.get(key, nationality.title())
     
     def normalize_intent(self, intent: str) -> str:
         intent_mapping = {
@@ -209,10 +141,17 @@ class HybridHotelSearchPipeline:
             "hotel_recommendation": "recommendation",
             "amenity_filtering": "facility_search",
             "location_query": "hotel_search",
-            "visa_requirements": "visa_query",
             "general_question": "hotel_search",
+            "traveller_query": "traveller_type_preferences",
+            "traveller_type_preferences": "traveller_type_preferences",
+            "hotels_with_min_reviews": "hotels_with_min_reviews",
+            "hotels_by_traveler_gender_age": "hotels_by_traveler_gender_age",
+            "score_filtering": "hotels_by_score_range",
+            "hotels_by_score_range": "hotels_by_score_range",
+            "best_value_hotels": "best_value_hotels",
+            "hotels_by_location_score": "hotels_by_location_score",
+            "hotels_with_best_staff": "hotels_with_best_staff"
         }
-        
         return intent_mapping.get(intent, "hotel_search")
     
     def retrieve_baseline_results(self, intent: str, params: Dict[str, Any]) -> List[Dict]:
@@ -224,135 +163,112 @@ class HybridHotelSearchPipeline:
         try:
             results = self.baseline_retriever.retrieve(retriever_intent, params)
             print(f"   Retrieved {len(results)} baseline results")
-            return results
+            return results[:1] if results else []
         except Exception as e:
             print(f"   Query failed: {e}")
             return []
     
-    def retrieve_embedding_results(self, query: str, entities: Dict[str, Any], 
-                                   limit: int = 5) -> Dict[str, List[Dict]]:
+    def retrieve_embedding_results(self, query: str, entities: Dict[str, Any]) -> Dict[str, List[Dict]]:
         print("\nStep 4B: Querying with Embeddings...")
         
-        city_filter = entities.get("cities", [None])[0]
-        if city_filter:
-            city_filter = city_filter.title()
+        if not self.embedding_retriever_minilm and not self.embedding_retriever_mpnet:
+            print("   Embedding retrievers not available")
+            return {}
+        
+        city_filter = None
+        if entities.get("cities"):
+            city_filter = entities["cities"][0]
+            if city_filter:
+                city_filter = city_filter.title()
         
         results = {}
         
-        print(f"   Searching with MiniLM...")
-        try:
-            minilm_results = self.embedding_retriever_minilm.search(
-                query, 
-                limit=limit,
-                city_filter=city_filter,
-                auto_detect_city=True
-            )
-            results["minilm"] = minilm_results
-            print(f"   Retrieved {len(minilm_results)} MiniLM results")
-        except Exception as e:
-            print(f"   MiniLM search failed: {e}")
-            results["minilm"] = []
+        if self.embedding_retriever_minilm:
+            print(f"   Searching with MiniLM...")
+            try:
+                minilm_results = self.embedding_retriever_minilm.search(
+                    query, 
+                    limit=1,
+                    city_filter=city_filter,
+                    auto_detect_city=True
+                )
+                results["minilm"] = minilm_results[:1] if minilm_results else []
+                print(f"   Retrieved {len(results['minilm'])} MiniLM results")
+            except Exception as e:
+                print(f"   MiniLM search failed: {e}")
+                results["minilm"] = []
         
-        print(f"   Searching with MPNet...")
-        try:
-            mpnet_results = self.embedding_retriever_mpnet.search(
-                query,
-                limit=limit,
-                city_filter=city_filter,
-                auto_detect_city=True
-            )
-            results["mpnet"] = mpnet_results
-            print(f"   Retrieved {len(mpnet_results)} MPNet results")
-        except Exception as e:
-            print(f"   MPNet search failed: {e}")
-            results["mpnet"] = []
+        if self.embedding_retriever_mpnet:
+            print(f"   Searching with MPNet...")
+            try:
+                mpnet_results = self.embedding_retriever_mpnet.search(
+                    query,
+                    limit=1,
+                    city_filter=city_filter,
+                    auto_detect_city=True
+                )
+                results["mpnet"] = mpnet_results[:1] if mpnet_results else []
+                print(f"   Retrieved {len(results['mpnet'])} MPNet results")
+            except Exception as e:
+                print(f"   MPNet search failed: {e}")
+                results["mpnet"] = []
         
         return results
     
-    def fetch_hotel_reviews(self, hotel_id: str, limit: int = 5) -> List[Dict]:
-        query = """
-        MATCH (h:Hotel {hotel_id:$hotel_id})<-[:REVIEWED]-(r:Review)
-        RETURN r.review_id AS review_id,
-            r.review_text AS review_text,
-            r.review_date AS review_date,
-            r.score_overall AS score_overall
-        ORDER BY r.review_date DESC 
-        LIMIT $limit
-        """
-
-        try:
-            with self.baseline_retriever.driver.session() as session:
-                result = session.run(query, {"hotel_id": hotel_id, "limit": limit})
-                return [record.data() for record in result]
-        except Exception as e:
-            print(f"   Failed to fetch reviews for {hotel_id}: {e}")
-            return []
-    
-    def format_baseline_results(self, results: List[Dict], intent: str) -> Dict[str, Any]:
-        if intent == "visa_requirements":
-            return {
-                "visa_info": results[0] if results else None,
-                "nodes": [],
-                "reviews": []
+    def format_results_structured(self, baseline_results: List[Dict], 
+                                  embedding_results: Dict[str, List[Dict]], 
+                                  intent: str) -> Dict[str, Any]:
+        
+        output = {
+            "baseline": {"nodes": [], "reviews": []},
+            "minilm": {"nodes": [], "reviews": []},
+            "mpnet": {"nodes": [], "reviews": []}
+        }
+        
+        if intent in ["hotel_reviews", "review_lookup"]:
+            output["baseline"]["reviews"] = baseline_results[:3] if baseline_results else []
+            return output
+        
+        if baseline_results:
+            result = baseline_results[0]
+            node = {
+                "hotel_id": result.get("hotel_id"),
+                "name": result.get("name"),
+                "city": result.get("city"),
+                "country": result.get("country"),
+                "star_rating": result.get("star_rating"),
+                "cleanliness": result.get("cleanliness") or result.get("cleanliness_base")
             }
-        elif intent in ["hotel_reviews", "review_lookup"]:
-            return {
-                "nodes": [],
-                "reviews": results
-            }
-        else:
-            formatted_nodes = []
-            for node in results:
-                formatted_node = {
-                    "id": node.get("hotel_id"),
-                    "name": node.get("name"),
-                    "city": node.get("city"),
-                    "country": node.get("country"),
-                    "rating": node.get("star_rating"),
-                    "cleanliness": node.get("cleanliness"),
+            
+            reviews = result.get("reviews", [])[:3]
+            
+            output["baseline"]["nodes"] = [node]
+            output["baseline"]["reviews"] = reviews
+        
+        for model_name in ["minilm", "mpnet"]:
+            if model_name in embedding_results and embedding_results[model_name]:
+                result = embedding_results[model_name][0]
+                node = {
+                    "hotel_id": result.get("hotel_id"),
+                    "name": result.get("name"),
+                    "city": result.get("city"),
+                    "country": result.get("country"),
+                    "star_rating": result.get("star_rating"),
+                    "cleanliness": result.get("cleanliness_base"),
+                    "similarity_score": result.get("score")
                 }
                 
-                if node.get("hotel_id"):
-                    formatted_node["reviews"] = self.fetch_hotel_reviews(node["hotel_id"], limit=3)
+                hotel_id = result.get("hotel_id")
+                if hotel_id:
+                    reviews_map = self.baseline_retriever.get_reviews_for_hotels([hotel_id], limit=3)
+                    reviews = reviews_map.get(hotel_id, [])
                 else:
-                    formatted_node["reviews"] = []
+                    reviews = []
                 
-                formatted_nodes.append(formatted_node)
-            
-            return {
-                "nodes": formatted_nodes,
-                "reviews": []
-            }
-    
-    def format_embedding_results(self, embedding_results: Dict[str, List[Dict]]) -> Dict[str, Any]:
-        formatted = {}
+                output[model_name]["nodes"] = [node]
+                output[model_name]["reviews"] = reviews
         
-        for model_name, results in embedding_results.items():
-            formatted_nodes = []
-            for node in results:
-                formatted_node = {
-                    "id": node.get("hotel_id"),
-                    "name": node.get("name"),
-                    "city": node.get("city"),
-                    "country": node.get("country"),
-                    "rating": node.get("star_rating"),
-                    "cleanliness": node.get("cleanliness_base"),
-                    "similarity_score": node.get("score"),
-                }
-                
-                if node.get("hotel_id"):
-                    formatted_node["reviews"] = self.fetch_hotel_reviews(node["hotel_id"], limit=3)
-                else:
-                    formatted_node["reviews"] = []
-                
-                formatted_nodes.append(formatted_node)
-            
-            formatted[model_name] = {
-                "similar_nodes": formatted_nodes,
-                "reviews": []
-            }
-        
-        return formatted
+        return output
     
     def process_query(self, query: str) -> Dict[str, Any]:
         print(f"\n{'='*80}")
@@ -360,47 +276,43 @@ class HybridHotelSearchPipeline:
         print(f"{'='*80}")
         
         intent_result = self.extract_intent(query)
-        intent = intent_result.get("intent", "unknown")
-        
-        if intent == "unknown":
-            return {
-                "query": query,
-                "baseline_results": {
-                    "nodes": [],
-                    "reviews": []
-                },
-                "embedding_results": {
-                    "minilm": {"similar_nodes": [], "reviews": []},
-                    "mpnet": {"similar_nodes": [], "reviews": []}
-                },
-                "error": "Could not determine query intent"
-            }
-        
+        raw_intent = intent_result.get("intent", "unknown")
         entities = self.extract_entities_from_query(query)
+        intent = refine_intent_with_entities(raw_intent, entities, query)
+        print(f"\n   Final intent (after refinement): {intent}")
         params = self.map_entities_to_params(intent, entities, query)
-        
+
+        if intent == "hotel_reviews" and not params.get("hotel_id") and params.get("hotel_name"):
+            qname = params["hotel_name"]
+            try:
+                tpl = self.baseline_retriever.queries.get("hotel_by_name")
+                if tpl:
+                    hits = self.baseline_retriever.run_query(tpl, {"q": qname, "limit": 1})
+                    if hits:
+                        params["hotel_id"] = hits[0].get("hotel_id")
+                        print(f"   Resolved hotel_name '{qname}' -> hotel_id '{params['hotel_id']}'")
+            except Exception as e:
+                print(f"   Warning: failed to resolve hotel_name to id: {e}")
+
         baseline_results = self.retrieve_baseline_results(intent, params)
         
         embedding_results = {}
-        if intent not in ["visa_requirements"]:
-            embedding_results = self.retrieve_embedding_results(query, entities, limit=5)
+        if intent not in ["hotel_reviews", "review_lookup"]:
+            embedding_results = self.retrieve_embedding_results(query, entities)
         
-        baseline_formatted = self.format_baseline_results(baseline_results, intent)
-        embedding_formatted = self.format_embedding_results(embedding_results)
+        structured_results = self.format_results_structured(baseline_results, embedding_results, intent)
         
         output = {
             "query": query,
-            "baseline_results": baseline_formatted,
-            "embedding_results": embedding_formatted
+            "results": structured_results
         }
         
         print(f"\n{'='*80}")
         print(f"RESULTS")
         print(f"{'='*80}")
-        print(f"Baseline: {len(baseline_formatted.get('nodes', []))} nodes, {len(baseline_formatted.get('reviews', []))} reviews")
-        if embedding_formatted:
-            for model_name, model_results in embedding_formatted.items():
-                print(f"{model_name.upper()}: {len(model_results.get('similar_nodes', []))} nodes")
+        print(f"Baseline: {len(structured_results['baseline']['nodes'])} hotels, {len(structured_results['baseline']['reviews'])} reviews")
+        print(f"MiniLM: {len(structured_results['minilm']['nodes'])} hotels, {len(structured_results['minilm']['reviews'])} reviews")
+        print(f"MPNet: {len(structured_results['mpnet']['nodes'])} hotels, {len(structured_results['mpnet']['reviews'])} reviews")
         print(f"\n{json.dumps(output, indent=2)}")
         
         return output
@@ -418,16 +330,12 @@ def interactive_mode(config_path=None, queries_path=None):
         while True:
             try:
                 query = input("\nEnter your query: ").strip()
-                
                 if not query:
                     continue
-                
                 if query.lower() in ['exit', 'quit', 'q']:
                     print("\nGoodbye!")
                     break
-                
                 pipeline.process_query(query)
-                
             except KeyboardInterrupt:
                 print("\n\nGoodbye!")
                 break
@@ -435,15 +343,18 @@ def interactive_mode(config_path=None, queries_path=None):
                 print(f"\nError processing query: {e}")
                 import traceback
                 traceback.print_exc()
-    
     finally:
         pipeline.close()
 
 
-def batch_mode(queries: List[str], config_path=None, queries_path=None):
+def batch_mode(queries_file: str, config_path=None, queries_path=None):
     print("\n" + "="*80)
     print("HYBRID HOTEL SEARCH PIPELINE - BATCH MODE")
     print("="*80)
+    
+    queries = []
+    with open(queries_file, 'r', encoding='utf-8') as f:
+        queries = [line.strip() for line in f if line.strip()]
     
     pipeline = HybridHotelSearchPipeline(config_path=config_path, queries_path=queries_path)
     
@@ -452,9 +363,7 @@ def batch_mode(queries: List[str], config_path=None, queries_path=None):
             print(f"\n\n{'#'*80}")
             print(f"# QUERY {i}/{len(queries)}")
             print(f"{'#'*80}")
-            
             pipeline.process_query(query)
-    
     finally:
         pipeline.close()
 
@@ -467,7 +376,7 @@ def main():
     )
     parser.add_argument(
         '--mode',
-        choices=['interactive', 'batch', 'demo'],
+        choices=['interactive', 'batch'],
         default='interactive',
         help='Execution mode (default: interactive)'
     )
@@ -483,32 +392,22 @@ def main():
         default=None,
         help='Path to queries.txt'
     )
+    parser.add_argument(
+        '--batch-file',
+        type=str,
+        default=None,
+        help='Path to file containing queries (one per line) for batch mode'
+    )
     
     args = parser.parse_args()
     
     if args.mode == 'interactive':
         interactive_mode(config_path=args.config, queries_path=args.queries)
-    
     elif args.mode == 'batch':
-        test_queries = [
-            "Find me hotels in Cairo",
-            "Show me reviews for The Royal Compass",
-            "I need a hotel in Dubai with a rating above 4 stars",
-            "Do Egyptians need a visa to travel to France?",
-            "Find hotels in Paris for a family with children aged 5-10",
-            "What are the best business hotels in London?",
-            "Show me hotels with good facilities in Tokyo",
-            "I want a hotel for a solo female traveler in their 30s",
-        ]
-        batch_mode(test_queries, config_path=args.config, queries_path=args.queries)
-    
-    elif args.mode == 'demo':
-        demo_queries = [
-            "Find hotels in Cairo",
-            "Show reviews for The Royal Compass",
-            "Do Egyptians need a visa to France?",
-        ]
-        batch_mode(demo_queries, config_path=args.config, queries_path=args.queries)
+        if not args.batch_file:
+            print("Error: --batch-file required for batch mode")
+            return
+        batch_mode(args.batch_file, config_path=args.config, queries_path=args.queries)
 
 
 if __name__ == "__main__":

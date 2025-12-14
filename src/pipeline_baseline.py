@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List
 import json
+import re
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -57,8 +58,20 @@ class HotelSearchPipeline:
                 "hotels": [], "cities": [], "countries": [], "traveler_types": [],
                 "facilities": [], "facility_ratings": {}, "nationality": [],
                 "age_numbers": [], "gender": [], "star_rating": None, "min_rating": None,
-                "min_facility_score": None, "min_reviews": None, "limit": 5
+                "min_facility_score": None, "min_reviews": None, "limit": 5,
+                "min_score": None, "max_score": None, "min_location_score": None
             }
+
+        q = query.lower()
+        
+        score_between_match = re.search(r'score.*?between\s+(\d+(?:\.\d+)?)\s+and\s+(\d+(?:\.\d+)?)', q)
+        if score_between_match:
+            entities["min_score"] = float(score_between_match.group(1))
+            entities["max_score"] = float(score_between_match.group(2))
+        
+        location_score_match = re.search(r'location\s+score\s+(?:above|over|>|>=)\s+(\d+(?:\.\d+)?)', q)
+        if location_score_match:
+            entities["min_location_score"] = float(location_score_match.group(1))
 
         formatted = format_entities_output(entities)
         if not formatted.startswith("No entities detected"):
@@ -76,6 +89,13 @@ class HotelSearchPipeline:
         else:
             params = {}
             params["limit"] = entities.get("limit", 5)
+        
+        if intent == "hotels_by_score_range":
+            params["min_score"] = entities.get("min_score", 0.0)
+            params["max_score"] = entities.get("max_score", 10.0)
+        
+        if intent == "hotels_by_location_score":
+            params["min_location_score"] = entities.get("min_location_score", 9.0)
         
         for key, value in params.items():
             print(f"   {key}: {value}")
@@ -99,6 +119,7 @@ class HotelSearchPipeline:
             "traveller_type_preferences": "traveller_type_preferences",
             "hotels_with_min_reviews": "hotels_with_min_reviews",
             "hotels_by_traveler_gender_age": "hotels_by_traveler_gender_age",
+            "score_filtering": "hotels_by_score_range",
             "hotels_by_score_range": "hotels_by_score_range",
             "best_value_hotels": "best_value_hotels",
             "hotels_by_location_score": "hotels_by_location_score",
@@ -126,7 +147,17 @@ class HotelSearchPipeline:
         elif intent in ["hotel_reviews", "review_lookup"]:
             return {"nodes": [], "reviews": results}
         else:
-            return {"nodes": results, "reviews": []}
+            nodes = []
+            for r in results:
+                node = {k: v for k, v in r.items() if k != "reviews"}
+                nodes.append(node)
+            
+            all_reviews = []
+            for r in results:
+                if "reviews" in r and r["reviews"]:
+                    all_reviews.extend(r["reviews"])
+            
+            return {"nodes": nodes, "reviews": all_reviews}
     
     def process_query(self, query: str) -> Dict[str, Any]:
         print(f"\n{'='*80}")
@@ -250,7 +281,10 @@ def main():
         demo_queries = [
             "Find hotels in Cairo",
             "Show reviews for The Royal Compass",
-            "Do Egyptians need a visa to France?",
+            "Find hotels with average score between 7 and 8",
+            "Show best value hotels",
+            "Find hotels with location score above 9",
+            "Show hotels with best staff",
         ]
         batch_mode(demo_queries, config_path=args.config, queries_path=args.queries)
 

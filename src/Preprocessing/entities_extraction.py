@@ -177,74 +177,96 @@ class EnhancedEntityExtractor:
         
         return facility_ratings
     
-    def _extract_gender(self, query: str) -> List[str]:
-        genders_found = []
-        for gender, patterns in self.config.GENDERS.items():
-            for pattern in patterns:
-                if re.search(pattern, query):
-                    if gender not in genders_found:
-                        genders_found.append(gender)
-        return genders_found
-    
-    def _extract_age_numbers(self, query: str) -> List[int]:
-        age_numbers = []
-        age_keywords = ['age', 'aged', 'years', 'old', 'year old', 'yr', 'yo', 'y.o.', 'years old']
-        has_age_context = any(keyword in query for keyword in age_keywords)
+    def extract_gender(self, query: str) -> List[str]:
+        query_lower = query.lower()
         
-        if has_age_context:
-            exact_patterns = [
-                r'(\d+)\s*years?\s*old\b',
-                r'\baged\s+(\d+)\b',
-                r'\bage\s+(\d+)\b',
-                r'\b(\d+)\s*years?\b',
-            ]
-            range_patterns = [
-                r'\b(\d+)\s*-\s*(\d+)\s*years?\b',
-                r'\b(\d+)\s+to\s+(\d+)\s*years?\b',
-                r'\b(\d+)\s+and\s+(\d+)\s*years?\b',
-            ]
-            decade_pattern = r'\b(?:in\s+their\s+)?(\d+)s\b'
-            plus_pattern = r'\b(\d+)\+\b'
-        else:
-            exact_patterns = [
-                r'\baged\s+(\d+)\b',
-                r'\bage\s+(\d+)\b',
-                r'\b(\d+)\s*years?\s*old\b',
-            ]
-            range_patterns = [
-                r'\b(\d+)\s*-\s*(\d+)\s*years?\b',
-            ]
-            decade_pattern = r'\b(?:in\s+their\s+)?(\d+)s\b'
-            plus_pattern = r'\b(\d+)\+\b'
+        gender_patterns = [
+            r'\b(male|female)\b',
+            r'\b(man|woman|men|women)\b',
+        ]
         
-        for pattern in range_patterns:
-            matches = re.finditer(pattern, query)
+        genders = []
+        for pattern in gender_patterns:
+            matches = re.findall(pattern, query_lower)
             for match in matches:
-                for group in match.groups():
-                    if group and group.isdigit():
-                        age = int(group)
-                        if 0 < age < 120:
-                            age_numbers.append(age)
-        for pattern in exact_patterns:
-            matches = re.finditer(pattern, query)
+                if match in ['male', 'man', 'men']:
+                    genders.append('Male')
+                elif match in ['female', 'woman', 'women']:
+                    genders.append('Female')
+        
+        return list(set(genders))
+
+    def extract_age_numbers(self, query: str) -> List[int]:
+        query_lower = query.lower()
+        
+        age_patterns = [
+            r'\baged?\s+(\d+)',
+            r'\b(\d+)\s+years?\s+old',
+            r'\bin\s+their\s+(\d+)s?',
+        ]
+        
+        ages = []
+        for pattern in age_patterns:
+            matches = re.findall(pattern, query_lower)
             for match in matches:
-                if match.group(1) and match.group(1).isdigit():
-                    age = int(match.group(1))
-                    if 0 < age < 120 and age not in age_numbers:
-                        age_numbers.append(age)
-        decade_matches = re.finditer(decade_pattern, query)
-        for match in decade_matches:
-            if match.group(1) and match.group(1).isdigit():
-                decade = int(match.group(1))
-                if 10 <= decade <= 90 and decade not in age_numbers:
-                    age_numbers.append(decade)
-        plus_matches = re.finditer(plus_pattern, query)
-        for match in plus_matches:
-            if match.group(1) and match.group(1).isdigit():
-                age = int(match.group(1))
-                if 0 < age < 120 and age not in age_numbers:
-                    age_numbers.append(age)
-        return sorted(list(set(age_numbers)))
+                try:
+                    age = int(match)
+                    if 0 < age < 120:
+                        ages.append(age)
+                except:
+                    continue
+        
+        return list(set(ages))
+
+    def map_entities_to_params(self, intent: str, entities: Dict[str, any], query: str) -> Dict[str, any]:
+        params = {}
+        params["limit"] = entities.get("limit", 5)
+        
+        if intent == "hotels_by_traveler_gender_age":
+            if entities.get("gender"):
+                params["gender"] = entities["gender"][0]
+            
+            if entities.get("age_numbers"):
+                params["age"] = entities["age_numbers"][0]
+            elif entities.get("age"):
+                try:
+                    params["age"] = int(entities["age"])
+                except:
+                    pass
+            
+            return params
+        
+        if entities.get("cities"):
+            params["city"] = entities["cities"][0].title()
+        
+        if entities.get("countries"):
+            params["country"] = entities["countries"][0].title()
+        
+        if entities.get("hotels"):
+            params["hotel_name"] = entities["hotels"][0]
+        
+        if entities.get("traveler_types"):
+            params["type"] = entities["traveler_types"][0]
+        
+        if entities.get("min_rating") is not None:
+            params["min_rating"] = entities["min_rating"]
+        
+        if entities.get("min_facility_score") is not None:
+            params["min_facility_score"] = entities["min_facility_score"]
+        
+        if entities.get("min_reviews") is not None:
+            params["min_reviews"] = entities["min_reviews"]
+        
+        if entities.get("min_score") is not None:
+            params["min_score"] = entities["min_score"]
+        
+        if entities.get("max_score") is not None:
+            params["max_score"] = entities["max_score"]
+        
+        if entities.get("min_location_score") is not None:
+            params["min_location_score"] = entities["min_location_score"]
+        
+        return params
     
     def _extract_star_rating(self, query: str) -> Optional[int]:
         patterns = [
@@ -353,64 +375,6 @@ class EnhancedEntityExtractor:
                 entities["limit"] = 5
         
         return entities
-    
-    def map_entities_to_params(self, intent: str, entities: Dict[str, any], query: str) -> Dict[str, any]:
-        params = {}
-        
-        if intent == "visa_requirements":
-            if entities.get("nationality"):
-                nationality = entities["nationality"][0]
-                country_from = self.nationality_to_country(nationality)
-                params["from"] = country_from
-            if entities.get("countries"):
-                params["to"] = entities["countries"][0].title()
-            if len(entities.get("countries", [])) >= 2 and not params.get("from"):
-                params["from"] = entities["countries"][0].title()
-                params["to"] = entities["countries"][1].title()
-            params["limit"] = entities.get("limit", 5)
-            return params
-
-        if entities.get("cities"):
-            params["city"] = entities["cities"][0].title()
-
-        if entities.get("countries"):
-            params["country"] = entities["countries"][0].title()
-
-        if entities.get("hotels"):
-            params["hotel_name"] = entities["hotels"][0]
-
-        if entities.get("traveler_types"):
-            params["traveler_type"] = entities["traveler_types"][0]
-            params["type"] = entities["traveler_types"][0]
-
-        if entities.get("gender"):
-            params["gender"] = entities["gender"][0].capitalize()
-
-        if entities.get("age_numbers"):
-            if len(entities["age_numbers"]) == 1:
-                params["age"] = entities["age_numbers"][0]
-            elif len(entities["age_numbers"]) >= 2:
-                params["age_min"] = min(entities["age_numbers"])
-                params["age_max"] = max(entities["age_numbers"])
-
-        if entities.get("min_facility_score") is not None:
-            params["min_facility_score"] = entities["min_facility_score"]
-
-        if entities.get("min_reviews") is not None:
-            params["min_reviews"] = entities["min_reviews"]
-
-        if entities.get("min_score") is not None:
-            params["min_score"] = entities["min_score"]
-
-        if entities.get("max_score") is not None:
-            params["max_score"] = entities["max_score"]
-
-        if entities.get("min_location_score") is not None:
-            params["min_location_score"] = entities["min_location_score"]
-
-        params["limit"] = entities.get("limit", 5)
-
-        return params
     
     def nationality_to_country(self, nationality: str) -> str:
         return {

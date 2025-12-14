@@ -32,7 +32,8 @@ Classify the user's query into one of these intents:
 6. location_query       → distances, nearby places, neighborhoods
 7. visa_requirements    → visa rules for traveling to a country
 8. general_question     → general hotel/travel info
-9. unknown              → unclear or unrelated
+9. score_filtering      → filter by scores (overall, value, location, staff, facilities)
+10. unknown             → unclear or unrelated
 
 Return ONLY a JSON object like this:
 
@@ -75,6 +76,13 @@ User Query: "{cleaned_query}"
 def classify_intent_rules(query: str) -> Dict:
     query_lower = query.lower()
     
+    if any(kw in query_lower for kw in ["score", "rating between", "average score", "avg score", "value for money", "location score", "staff score", "best staff", "best value"]):
+        return {
+            "intent": "score_filtering",
+            "reason": "Query contains score filtering keywords",
+            "method": "rule_based"
+        }
+    
     intent_keywords = {
         "hotel_search": ["find", "search", "look for", "show me", "need", "want", "looking"],
         "hotel_details": ["does", "has", "have", "what is", "tell me about", "details", "information"],
@@ -99,6 +107,10 @@ def classify_intent_rules(query: str) -> Dict:
 
 def hybrid_intent_detection(query: str) -> Dict:
     query_lower = query.lower()
+    
+    if any(kw in query_lower for kw in ["score", "rating between", "average score", "avg score", "value for money", "location score", "staff score", "best staff", "best value"]):
+        return {"intent": "score_filtering", "reason": "Query contains score filtering keywords", "method": "rule_based"}
+    
     visa_keywords = ["visa", "passport", "entry requirement", "travel document", "need a visa", "require a visa", "visa requirement"]
     
     if any(keyword in query_lower for keyword in visa_keywords):
@@ -118,6 +130,18 @@ def hybrid_intent_detection(query: str) -> Dict:
 def refine_intent_with_entities(raw_intent: str, entities: Dict[str, Any], query: str) -> str:
     intent = raw_intent or "unknown"
     q = query.lower()
+
+    if entities.get("min_score") is not None or entities.get("max_score") is not None:
+        return "hotels_by_score_range"
+    
+    if "value for money" in q or "best value" in q:
+        return "best_value_hotels"
+    
+    if "location score" in q:
+        return "hotels_by_location_score"
+    
+    if "staff" in q and ("best staff" in q or "staff score" in q):
+        return "hotels_with_best_staff"
 
     if entities.get("countries") and not entities.get("cities"):
         return "hotel_search"
@@ -159,27 +183,7 @@ def refine_intent_with_entities(raw_intent: str, entities: Dict[str, Any], query
     if intent == "hotel_reviews":
         return "hotel_reviews"
 
-    if "between" in q and ("score" in q or "average" in q):
-        range_match = re.search(r'between\s+([0-9]+(?:\.[0-9]+)?)\s+and\s+([0-9]+(?:\.[0-9]+)?)', q)
-        if range_match:
-            entities["min_score"] = float(range_match.group(1))
-            entities["max_score"] = float(range_match.group(2))
-            return "hotels_by_score_range"
-
-    if "best value" in q or "value_for_money" in q:
-        return "best_value_hotels"
-
-    if "location score" in q:
-        loc_match = re.search(r'location\s+score\s+(?:above|over|>=|>)\s*([0-9]+(?:\.[0-9]+)?)', q)
-        if loc_match:
-            entities["min_location_score"] = float(loc_match.group(1))
-        return "hotels_by_location_score"
-
-    if "best staff" in q:
-        return "hotels_with_best_staff"
-
     return intent
-
 
 def main():
     test_queries = [
