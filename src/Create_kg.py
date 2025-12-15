@@ -3,7 +3,7 @@
 import csv
 from neo4j import GraphDatabase
 
-CONFIG_PATH = "data/config.txt"
+CONFIG_PATH = "../data/config.txt"
 
 # ---------- 1. Read config ----------
 
@@ -88,7 +88,7 @@ class HotelKGBuilder:
 
     # ----- Import from hotels.csv -----
 
-    def import_hotels_and_locations(self, hotels_csv="data/hotels.csv"):
+    def import_hotels_and_locations(self, hotels_csv="../data/hotels.csv"):
         """
         From hotels.csv:
           - Create Country(name)
@@ -151,7 +151,7 @@ class HotelKGBuilder:
 
     # ----- Import from users.csv -----
 
-    def import_travellers(self, users_csv="data/users.csv"):
+    def import_travellers(self, users_csv="../data/users.csv"):
         """
         From users.csv:
           - Create Traveller(user_id, age, type, gender)
@@ -195,7 +195,7 @@ class HotelKGBuilder:
 
     # ----- Import from reviews.csv -----
 
-    def import_reviews_and_stays(self, reviews_csv="data/reviews.csv"):
+    def import_reviews_and_stays(self, reviews_csv="../data/reviews.csv"):
         """
         From reviews.csv:
           - Create Review node with all required score properties
@@ -278,7 +278,7 @@ class HotelKGBuilder:
                 )
     # ----- Import from visa.csv -----
 
-    def import_visas(self, visa_csv="data/visa.csv"):
+    def import_visas(self, visa_csv="../data/visa.csv"):
         """
         From visa.csv:
           - For rows where requires = true, create:

@@ -1,0 +1,94 @@
+[
+  {
+    "query": "Hotels for business travelers in London",
+    "minilm": [
+      {
+        "hotel_id": "2",
+        "name": "The Royal Compass",
+        "city": "London",
+        "score": 0.6602
+      }
+    ],
+    "mpnet": [
+      {
+        "hotel_id": "2",
+        "name": "The Royal Compass",
+        "city": "London",
+        "score": 0.5819
+      }
+    ],
+    "overlap_hotel_ids": [
+      "2"
+    ],
+    "overlap_count": 1
+  },
+  {
+    "query": "Luxury hotels with good staff",
+    "minilm": [
+      {
+        "hotel_id": "5",
+        "name": "The Golden Oasis",
+        "city": "Dubai",
+        "score": 0.7107
+      },
+      {
+        "hotel_id": "16",
+        "name": "Han River Oasis",
+        "city": "Seoul",
+        "score": 0.6889
+      }
+    ],
+    "mpnet": [
+      {
+        "hotel_id": "17",
+        "name": "Kremlin Suites",
+        "city": "Moscow",
+        "score": 0.764
+      },
+      {
+        "hotel_id": "3",
+        "name": "L'\u00c9toile Palace",
+        "city": "Paris",
+        "score": 0.741
+      }
+    ],
+    "overlap_hotel_ids": [],
+    "overlap_count": 0
+  },
+  {
+    "query": "Show me The Royal Compass",
+    "minilm": [
+      {
+        "hotel_id": "2",
+        "name": "The Royal Compass",
+        "city": "London",
+        "score": 0.6752
+      },
+      {
+        "hotel_id": "13",
+        "name": "The Gateway Royale",
+        "city": "Mumbai",
+        "score": 0.5233
+      }
+    ],
+    "mpnet": [
+      {
+        "hotel_id": "2",
+        "name": "The Royal Compass",
+        "city": "London",
+        "score": 0.7643
+      },
+      {
+        "hotel_id": "13",
+        "name": "The Gateway Royale",
+        "city": "Mumbai",
+        "score": 0.5932
+      }
+    ],
+    "overlap_hotel_ids": [
+      "13",
+      "2"
+    ],
+    "overlap_count": 2
+  }
+]
