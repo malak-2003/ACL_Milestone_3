@@ -44,10 +44,6 @@ numpy>=1.26.0  # Python 3.12 compatible
 pandas>=2.0.3
 tqdm>=4.66.1
 
-# LangChain for embeddings
-langchain>=0.1.0
-langchain-community>=0.0.10
-langchain-huggingface>=0.0.1
 
 # For preprocessing (intent detection & entity extraction)
 spacy>=3.7.2

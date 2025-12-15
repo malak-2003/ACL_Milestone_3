@@ -409,6 +409,38 @@ def main():
             return
         batch_mode(args.batch_file, config_path=args.config, queries_path=args.queries)
 
-
+def simple_query(query: str, config_path: str = None, queries_path: str = None) -> Dict[str, Any]:
+    """
+    Simple function to process a single query and return results.
+    
+    Args:
+        query: User's hotel search query
+        config_path: Optional path to config.txt
+        queries_path: Optional path to queries.txt
+    
+    Returns:
+        Dict with query and results from all three retrievers
+    
+    Example:
+        >>> result = simple_query("Find hotels in Cairo")
+        >>> print(result)
+    """
+    pipeline = HybridHotelSearchPipeline(config_path=config_path, queries_path=queries_path)
+    
+    try:
+        result = pipeline.process_query(query)
+        return result
+    finally:
+        pipeline.close()
 if __name__ == "__main__":
-    main()
+    # Just call it with a query string
+    result = simple_query("")
+    
+    # Print the result
+    print("\n" + "="*80)
+    print("SIMPLE QUERY RESULT")
+    print("="*80)
+    print(json.dumps(result, indent=2))   
+        
+# if __name__ == "__main__":
+#     main()
