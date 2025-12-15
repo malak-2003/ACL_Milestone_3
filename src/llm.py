@@ -331,37 +331,105 @@ Stars: {node.get('star_rating')}
 #     return "\n\n".join(blocks)
 
 
-
 def build_prompt(query: str, context: str) -> str:
-    """Build structured prompt with clear instructions and examples."""
-    return f"""You are a knowledgeable hotel booking assistant helping travelers find their perfect accommodation.
+    """Final optimized prompt - balanced and clear."""
+    return f"""You are a helpful hotel information assistant.
 
-CONTEXT - Hotel Information Retrieved:
+HOTEL DATA:
 {context}
 
-INSTRUCTIONS:
-1. Answer the user's question naturally and conversationally
-2. Use ONLY information from the context above - never invent details
-3. Present information in a helpful, narrative format (NOT as raw data dumps)
-4. Include relevant details like:
-   - Hotel name, location, and star rating
-   - Overall ratings and specific scores (cleanliness, comfort, location, etc.)
-   - Key highlights from recent reviews
-   - Any comparisons if multiple hotels are mentioned
-5. If information is missing from context, acknowledge it naturally
-6. Keep your response between 50-150 words
-7. Be specific with numbers (e.g., "8.9/10" not just "high rating")
-
-EXAMPLE GOOD RESPONSE:
-"The Sunset Plaza is a 4-star hotel in Barcelona, Spain. It has an excellent overall rating of 9.2/10, with guests particularly praising its cleanliness (9.5/10) and prime location (9.4/10). Recent reviews highlight the 'stunning rooftop views' and 'attentive staff.' However, some guests noted the rooms could be larger."
-
-EXAMPLE BAD RESPONSE:
-"Review ID: 12345, Score: 9.2, Date: 2025-12-30" ❌ (Too raw/technical)
-"It's a good hotel." ❌ (Too vague)
+IMPORTANT INSTRUCTIONS:
+1. Answer in natural, conversational language (NOT as raw data or bullet points)
+2. Use ONLY the information provided above - do not invent details
+3. Do not mention amenities, landmarks, or nearby places unless stated in the data
+4. Include all review scores with numbers (e.g., "8.9/10, 9.1/10, 9.0/10")
+5. If review text seems unclear or unusual, briefly acknowledge it
+6. Write 70-85 words in paragraph format
 
 USER QUESTION: {query}
 
-YOUR RESPONSE:"""
+YOUR ANSWER (write naturally, like speaking to a traveler):"""
+# def build_prompt(query: str, context: str) -> str:
+#     """Universal prompt optimized for all models."""
+#     return f"""You are a professional hotel information assistant providing accurate, helpful responses to travelers.
+
+# HOTEL DATA AVAILABLE:
+# {context}
+
+# YOUR TASK:
+# Answer the user's question using ONLY the information provided above.
+
+# MANDATORY RULES:
+# 1. Base your answer exclusively on the data above - do not invent, assume, or infer any details
+# 2. DO NOT mention: amenities (pools, gyms, spas), nearby landmarks, transportation, or features not explicitly stated
+# 3. DO NOT make generalizations like "guests loved" or "travelers praised" unless directly quoting a review
+# 4. DO NOT interpret unclear review text as hotel features or qualities
+# 5. If review text seems unusual or unclear, you may note this briefly but do not try to interpret it
+# 6. DO NOT invent any details or reviews
+# 7. DO NOT hallucinate
+
+# WHAT TO INCLUDE:
+# - Hotel name, city, country, and star rating
+# - ALL review scores mentioned (e.g., "scores of 8.9/10, 9.1/10, and 9.0/10")
+# - Specific review dates if relevant
+# - Direct quotes from reviews and mention if they are meaningless
+# - If multiple hotels match, provide information on each and compare between them.
+
+
+# RESPONSE FORMAT:
+# - Write 70-90 words
+# - Use natural, conversational language (not bullet points or raw data)
+# - Be specific with numbers and dates
+# - Acknowledge limitations if data is unclear or insufficient
+
+# GOOD EXAMPLE:
+# "The Ocean View Resort is a 4-star hotel in Miami, Florida. Recent reviews from December 2024 show overall scores of 9.2/10, 8.8/10, and 9.5/10. Reviewers consistently rated cleanliness at 9.4/10 and location at 9.6/10. One guest noted 'excellent beachfront access and spacious rooms.' The hotel maintains high scores across all categories based on the available reviews."
+
+# BAD EXAMPLES:
+# ❌ "The hotel has stunning views and friendly staff" (inventing details)
+# ❌ "Located near the city center and major attractions" (assuming location details)
+# ❌ "Guests praised the amenities and service" (vague generalization)
+# ❌ "Review ID: 12345, Score: 9.2" (raw data format)
+
+# USER QUESTION: {query}
+
+# YOUR RESPONSE (70-90 words, factual and helpful):"""
+
+# def build_prompt(query: str, context: str) -> str:
+#     """Build structured prompt with clear instructions and examples."""
+#     return f"""You are a knowledgeable hotel booking assistant helping travelers find their perfect accommodation.
+
+# CONTEXT - Hotel Information Retrieved:
+# {context}
+
+# INSTRUCTIONS:
+# 1. Answer the user's question naturally and conversationally
+# 2. Use ONLY information from the context above - never invent details
+# 3. If a detail is not mentioned, say "not specified" or skip it
+# 4. NEVER invent details like amenities, nearby landmarks, or features
+# 5. Quote review text EXACTLY as written, even if it seems unusual
+# 6. If reviews seem unclear, acknowledge that
+# 7. Present information in a helpful, narrative format (NOT as raw data dumps)
+# 8. Include relevant details like:
+#    - Hotel name, location, and star rating
+#    - Overall ratings and specific scores (cleanliness, comfort, location, etc.)
+#    - Key highlights from recent reviews
+#    - Any comparisons if multiple hotels are mentioned
+# 9. If information is missing from context, acknowledge it naturally
+# 10. Keep your response between 50-150 words
+# 11. Be specific with numbers (e.g., "8.9/10" not just "high rating")
+# 12. Do not hallucinate
+
+# EXAMPLE GOOD RESPONSE:
+# "The Sunset Plaza is a 4-star hotel in Barcelona, Spain. It has an excellent overall rating of 9.2/10, with guests particularly praising its cleanliness (9.5/10) and prime location (9.4/10). Recent reviews highlight the 'stunning rooftop views' and 'attentive staff.' However, some guests noted the rooms could be larger."
+
+# EXAMPLE BAD RESPONSE:
+# "Review ID: 12345, Score: 9.2, Date: 2025-12-30" ❌ (Too raw/technical)
+# "It's a good hotel." ❌ (Too vague)
+
+# USER QUESTION: {query}
+
+# YOUR RESPONSE:"""
 
 # def build_prompt(query: str, context: str) -> str:
 #     """Build structured prompt with persona, context, and task."""
@@ -811,7 +879,6 @@ def print_detailed_comparison(result: Dict):
 
 
 
-
 # ## 📋 **Complete Metrics Summary**
 
 # ### **Quantitative Metrics** ✅
@@ -961,6 +1028,29 @@ def print_detailed_comparison(result: Dict):
 #    • Qwen-2.5-7B is 5.8% better quality but 2.58s slower
 #    • Llama-3.2-1B is 2.58s faster but 5.8% lower quality
 #    ➡️  Recommendation: Use Qwen-2.5-7B for quality, Llama-3.2-1B for speed
+
+def get_ui_response(result: Dict) -> list:
+    """
+    Returns a simple list of dictionaries with model names and responses.
+    
+    Returns:
+        List of dicts: [{"model_name": str, "response": str}, ...]
+    """
+    models = []
+    
+    for model_name, output in result["results"].items():
+        if output["status"] == "success":
+            models.append({
+                "model_name": model_name,
+                "response": output["answer"]
+            })
+        else:
+            models.append({
+                "model_name": model_name,
+                "response": f"Error: {output['error']}"
+            })
+    
+    return models
 if __name__ == "__main__":
     # Test data
     from example_retrieval_result import example_retrieval_result
@@ -973,4 +1063,15 @@ if __name__ == "__main__":
         exit(1)
     
     result = generate_answers_with_all_models(example_retrieval_result)
-    print_detailed_comparison(result)
+    # print(result)
+    # print_detailed_comparison(result)
+
+    models_data = get_ui_response(result)
+    print(models_data)
+    # ui_result=get_ui_response(result)
+    # print(ui_result)
+    
+
+    
+
+    # print_detailed_comparison(result)
