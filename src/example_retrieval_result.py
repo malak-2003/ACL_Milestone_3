@@ -2,95 +2,417 @@
 # This shows the expected output format from Task 2 (Graph Retrieval Layer)
 # Your Task 2 code should produce this structure
 
+# example_retrieval_result = {
+#     "query": "Find good hotels in Cairo with a pool",
+    
+#     # Results from baseline Cypher queries
+#     "baseline_results": {
+#         "cypher_query": "MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name: 'Cairo'}) WHERE 'pool' IN h.amenities RETURN h",
+#         "execution_time": 0.045,
+#         "nodes": [
+#             {
+#                 "type": "Hotel",
+#                 "id": "hotel_1",
+#                 "name": "Cairo Horizon Hotel",
+#                 "city": "Cairo",
+#                 "country": "Egypt",
+#                 "rating": 4.6,
+#                 "amenities": ["wifi", "pool", "breakfast"],
+#                 "description": "A modern hotel with Nile views."
+#             },
+#             {
+#                 "type": "Hotel",
+#                 "id": "hotel_2",
+#                 "name": "Nile Pearl Inn",
+#                 "city": "Cairo",
+#                 "country": "Egypt",
+#                 "rating": 4.3,
+#                 "amenities": ["wifi", "pool"],
+#                 "description": "Affordable hotel near downtown Cairo."
+#             }
+#         ],
+#         "relationships": [
+#             {
+#                 "type": "LOCATED_IN",
+#                 "start": "hotel_1",
+#                 "end": "Cairo"
+#             },
+#             {
+#                 "type": "LOCATED_IN",
+#                 "start": "hotel_2",
+#                 "end": "Cairo"
+#             }
+#         ],
+#         "reviews": [
+#             {
+#                 "type": "Review",
+#                 "hotel_id": "hotel_1",
+#                 "text": "Amazing view and very clean rooms.",
+#                 "score": 5
+#             },
+#             {
+#                 "type": "Review",
+#                 "hotel_id": "hotel_2",
+#                 "text": "Good value for money but breakfast is limited.",
+#                 "score": 4
+#             }
+#         ]
+#     },
+    
+#     # Results from embedding-based retrieval
+#     "embedding_results": {
+#         "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+#         "query_embedding_time": 0.012,
+#         "search_time": 0.028,
+#         "similar_nodes": [
+#             {
+#                 "type": "Hotel",
+#                 "id": "hotel_1",  # Same as baseline - will be deduplicated
+#                 "name": "Cairo Horizon Hotel",
+#                 "city": "Cairo",
+#                 "country": "Egypt",
+#                 "rating": 4.6,
+#                 "amenities": ["wifi", "pool", "breakfast"],
+#                 "description": "A modern hotel with Nile views.",
+#                 "similarity_score": 0.92  # High similarity to query
+#             },
+#             {
+#                 "type": "Hotel",
+#                 "id": "hotel_3",  # New hotel not found by baseline
+#                 "name": "Pyramids View Resort",
+#                 "city": "Cairo",
+#                 "country": "Egypt",
+#                 "rating": 4.5,
+#                 "amenities": ["pool", "spa", "wifi"],
+#                 "description": "Luxury resort with pyramid views and excellent pool facilities.",
+#                 "similarity_score": 0.88
+#             }
+#         ],
+#         "reviews": []  # Reviews already in baseline
+#     }
+# }
+
 example_retrieval_result = {
-    "query": "Find good hotels in Cairo with a pool",
-    
-    # Results from baseline Cypher queries
-    "baseline_results": {
-        "cypher_query": "MATCH (h:Hotel)-[:LOCATED_IN]->(c:City {name: 'Cairo'}) WHERE 'pool' IN h.amenities RETURN h",
-        "execution_time": 0.045,
-        "nodes": [
-            {
-                "type": "Hotel",
-                "id": "hotel_1",
-                "name": "Cairo Horizon Hotel",
-                "city": "Cairo",
-                "country": "Egypt",
-                "rating": 4.6,
-                "amenities": ["wifi", "pool", "breakfast"],
-                "description": "A modern hotel with Nile views."
-            },
-            {
-                "type": "Hotel",
-                "id": "hotel_2",
-                "name": "Nile Pearl Inn",
-                "city": "Cairo",
-                "country": "Egypt",
-                "rating": 4.3,
-                "amenities": ["wifi", "pool"],
-                "description": "Affordable hotel near downtown Cairo."
-            }
-        ],
-        "relationships": [
-            {
-                "type": "LOCATED_IN",
-                "start": "hotel_1",
-                "end": "Cairo"
-            },
-            {
-                "type": "LOCATED_IN",
-                "start": "hotel_2",
-                "end": "Cairo"
-            }
-        ],
-        "reviews": [
-            {
-                "type": "Review",
-                "hotel_id": "hotel_1",
-                "text": "Amazing view and very clean rooms.",
-                "score": 5
-            },
-            {
-                "type": "Review",
-                "hotel_id": "hotel_2",
-                "text": "Good value for money but breakfast is limited.",
-                "score": 4
-            }
-        ]
-    },
-    
-    # Results from embedding-based retrieval
-    "embedding_results": {
-        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-        "query_embedding_time": 0.012,
-        "search_time": 0.028,
-        "similar_nodes": [
-            {
-                "type": "Hotel",
-                "id": "hotel_1",  # Same as baseline - will be deduplicated
-                "name": "Cairo Horizon Hotel",
-                "city": "Cairo",
-                "country": "Egypt",
-                "rating": 4.6,
-                "amenities": ["wifi", "pool", "breakfast"],
-                "description": "A modern hotel with Nile views.",
-                "similarity_score": 0.92  # High similarity to query
-            },
-            {
-                "type": "Hotel",
-                "id": "hotel_3",  # New hotel not found by baseline
-                "name": "Pyramids View Resort",
-                "city": "Cairo",
-                "country": "Egypt",
-                "rating": 4.5,
-                "amenities": ["pool", "spa", "wifi"],
-                "description": "Luxury resort with pyramid views and excellent pool facilities.",
-                "similarity_score": 0.88
-            }
-        ],
-        "reviews": []  # Reviews already in baseline
+    "query": "Show me The Royal Compass",
+    "results": {
+        "baseline": {
+            "nodes": [
+                {
+                    "hotel_id": "2",
+                    "name": "The Royal Compass",
+                    "city": "London",
+                    "country": "United Kingdom",
+                    "star_rating": 5,
+                    "cleanliness": None
+                }
+            ],
+            "reviews": [
+                {
+                    "review_id": "16168",
+                    "review_text": "Front start executive spring only.\nShare short down anything oil Mrs challenge. Important specific operation book cost according itself.",
+                    "review_date": "2025-12-30",
+                    "score_overall": 8.9,
+                    "score_cleanliness": 9.5,
+                    "score_comfort": 9.3,
+                    "score_facilities": 8.2,
+                    "score_location": 9.2,
+                    "score_staff": 9.0,
+                    "score_value_for_money": 8.0
+                },
+                {
+                    "review_id": "40404",
+                    "review_text": "Stuff power front late hard position property. Pick force bill police interview technology firm. Seem they college between hold.",
+                    "review_date": "2025-12-29",
+                    "score_overall": 9.1,
+                    "score_cleanliness": 9.1,
+                    "score_comfort": 9.1,
+                    "score_facilities": 8.8,
+                    "score_location": 9.2,
+                    "score_staff": 9.5,
+                    "score_value_for_money": 8.9
+                },
+                {
+                    "review_id": "12758",
+                    "review_text": "Standard while feeling marriage. Cover protect gas imagine them generation.",
+                    "review_date": "2025-12-27",
+                    "score_overall": 9.0,
+                    "score_cleanliness": 9.5,
+                    "score_comfort": 8.7,
+                    "score_facilities": 9.5,
+                    "score_location": 9.1,
+                    "score_staff": 9.5,
+                    "score_value_for_money": 7.8
+                }
+            ]
+        },
+        "minilm": {
+            "nodes": [
+                {
+                    "hotel_id": "2",
+                    "name": "The Royal Compass",
+                    "city": "London",
+                    "country": "United Kingdom",
+                    "star_rating": 5,
+                    "cleanliness": 9.0,
+                    "similarity_score": 0.6751792430877686
+                }
+            ],
+            "reviews": [
+                {
+                    "review_id": "16168",
+                    "review_text": "Front start executive spring only.\nShare short down anything oil Mrs challenge. Important specific operation book cost according itself.",
+                    "review_date": "2025-12-30",
+                    "score_overall": 8.9,
+                    "score_cleanliness": 9.5,
+                    "score_comfort": 9.3,
+                    "score_facilities": 8.2,
+                    "score_location": 9.2,
+                    "score_staff": 9.0,
+                    "score_value_for_money": 8.0
+                },
+                {
+                    "review_id": "40404",
+                    "review_text": "Stuff power front late hard position property. Pick force bill police interview technology firm. Seem they college between hold.",
+                    "review_date": "2025-12-29",
+                    "score_overall": 9.1,
+                    "score_cleanliness": 9.1,
+                    "score_comfort": 9.1,
+                    "score_facilities": 8.8,
+                    "score_location": 9.2,
+                    "score_staff": 9.5,
+                    "score_value_for_money": 8.9
+                },
+                {
+                    "review_id": "12758",
+                    "review_text": "Standard while feeling marriage. Cover protect gas imagine them generation.",
+                    "review_date": "2025-12-27",
+                    "score_overall": 9.0,
+                    "score_cleanliness": 9.5,
+                    "score_comfort": 8.7,
+                    "score_facilities": 9.5,
+                    "score_location": 9.1,
+                    "score_staff": 9.5,
+                    "score_value_for_money": 7.8
+                }
+            ]
+        },
+        "mpnet": {
+            "nodes": [
+                {
+                    "hotel_id": "13",
+                    "name": "The Gateway Royale",
+                    "city": "Mumbai",
+                    "country": "India",
+                    "star_rating": 5,
+                    "cleanliness": 8.9,
+                    "similarity_score": 0.5931969285011292
+                }
+            ],
+            "reviews": [
+                {
+                    "review_id": "34316",
+                    "review_text": "Spring reality daughter six establish either need. Investment like support toward unit address hot beat. Care rise south myself star.",
+                    "review_date": "2025-12-31",
+                    "score_overall": 9.0,
+                    "score_cleanliness": 9.2,
+                    "score_comfort": 9.1,
+                    "score_facilities": 8.9,
+                    "score_location": 9.3,
+                    "score_staff": 8.7,
+                    "score_value_for_money": 8.8
+                },
+                {
+                    "review_id": "20271",
+                    "review_text": "Specific lead identify theory.\nAmerican instead position may response. Good feeling political that street such thank. Set senior many human here on.",
+                    "review_date": "2025-12-29",
+                    "score_overall": 9.0,
+                    "score_cleanliness": 9.4,
+                    "score_comfort": 9.5,
+                    "score_facilities": 8.0,
+                    "score_location": 9.4,
+                    "score_staff": 8.6,
+                    "score_value_for_money": 8.8
+                },
+                {
+                    "review_id": "20757",
+                    "review_text": "Turn close executive certainly heavy vote. Office ago tree seven.\nArrive something head wait clearly. His whom section my knowledge get simple.",
+                    "review_date": "2025-12-29",
+                    "score_overall": 8.9,
+                    "score_cleanliness": 9.1,
+                    "score_comfort": 8.1,
+                    "score_facilities": 8.9,
+                    "score_location": 9.4,
+                    "score_staff": 9.2,
+                    "score_value_for_money": 8.7
+                }
+            ]
+        }
     }
 }
+
+
+# example_retrieval_result = {
+
+
+
+#   "query": "Show me The Royal Compass",
+#   "results": {
+#     "baseline": {
+#       "nodes": [
+#         {
+#           "hotel_id": "2",
+#           "name": "The Royal Compass",
+#           "city": "London",
+#           "country": "United Kingdom",
+#           "star_rating": 5,
+#           "cleanliness": null
+#         }
+#       ],
+#       "reviews": [
+#         {
+#           "review_id": "16168",
+#           "review_text": "Front start executive spring only.\nShare short down anything oil Mrs challenge. Important specific operation book cost according itself.",
+#           "review_date": "2025-12-30",
+#           "score_overall": 8.9,
+#           "score_cleanliness": 9.5,
+#           "score_comfort": 9.3,
+#           "score_facilities": 8.2,
+#           "score_location": 9.2,
+#           "score_staff": 9.0,
+#           "score_value_for_money": 8.0
+#         },
+#         {
+#           "review_id": "40404",
+#           "review_text": "Stuff power front late hard position property. Pick force bill police interview technology firm. Seem they college between hold.",
+#           "review_date": "2025-12-29",
+#           "score_overall": 9.1,
+#           "score_cleanliness": 9.1,
+#           "score_comfort": 9.1,
+#           "score_facilities": 8.8,
+#           "score_location": 9.2,
+#           "score_staff": 9.5,
+#           "score_value_for_money": 8.9
+#         },
+#         {
+#           "review_id": "12758",
+#           "review_text": "Standard while feeling marriage. Cover protect gas imagine them generation.",
+#           "review_date": "2025-12-27",
+#           "score_overall": 9.0,
+#           "score_cleanliness": 9.5,
+#           "score_comfort": 8.7,
+#           "score_facilities": 9.5,
+#           "score_location": 9.1,
+#           "score_staff": 9.5,
+#           "score_value_for_money": 7.8
+#         }
+#       ]
+#     },
+#     "minilm": {
+#       "nodes": [
+#         {
+#           "hotel_id": "2",
+#           "name": "The Royal Compass",
+#           "city": "London",
+#           "country": "United Kingdom",
+#           "star_rating": 5,
+#           "cleanliness": 9.0,
+#           "similarity_score": 0.6751792430877686
+#         }
+#       ],
+#       "reviews": [
+#         {
+#           "review_id": "16168",
+#           "review_text": "Front start executive spring only.\nShare short down anything oil Mrs challenge. Important specific operation book cost according itself.",
+#           "review_date": "2025-12-30",
+#           "score_overall": 8.9,
+#           "score_cleanliness": 9.5,
+#           "score_comfort": 9.3,
+#           "score_facilities": 8.2,
+#           "score_location": 9.2,
+#           "score_staff": 9.0,
+#           "score_value_for_money": 8.0
+#         },
+#         {
+#           "review_id": "40404",
+#           "review_text": "Stuff power front late hard position property. Pick force bill police interview technology firm. Seem they college between hold.",
+#           "review_date": "2025-12-29",
+#           "score_overall": 9.1,
+#           "score_cleanliness": 9.1,
+#           "score_comfort": 9.1,
+#           "score_facilities": 8.8,
+#           "score_location": 9.2,
+#           "score_staff": 9.5,
+#           "score_value_for_money": 8.9
+#         },
+#         {
+#           "review_id": "12758",
+#           "review_text": "Standard while feeling marriage. Cover protect gas imagine them generation.",
+#           "review_date": "2025-12-27",
+#           "score_overall": 9.0,
+#           "score_cleanliness": 9.5,
+#           "score_comfort": 8.7,
+#           "score_facilities": 9.5,
+#           "score_location": 9.1,
+#           "score_staff": 9.5,
+#           "score_value_for_money": 7.8
+#         }
+#       ]
+#     },
+#     "mpnet": {
+#       "nodes": [
+#         {
+#           "hotel_id": "13",
+#           "name": "The Gateway Royale",
+#           "city": "Mumbai",
+#           "country": "India",
+#           "star_rating": 5,
+#           "cleanliness": 8.9,
+#           "similarity_score": 0.5931969285011292
+#         }
+#       ],
+#       "reviews": [
+#         {
+#           "review_id": "34316",
+#           "review_text": "Spring reality daughter six establish either need. Investment like support toward unit address hot beat. Care rise south myself star.",
+#           "review_date": "2025-12-31",
+#           "score_overall": 9.0,
+#           "score_cleanliness": 9.2,
+#           "score_comfort": 9.1,
+#           "score_facilities": 8.9,
+#           "score_location": 9.3,
+#           "score_staff": 8.7,
+#           "score_value_for_money": 8.8
+#         },
+#         {
+#           "review_id": "20271",
+#           "review_text": "Specific lead identify theory.\nAmerican instead position may response. Good feeling political that street such thank. Set senior many human here on.",
+#           "review_date": "2025-12-29",
+#           "score_overall": 9.0,
+#           "score_cleanliness": 9.4,
+#           "score_comfort": 9.5,
+#           "score_facilities": 8.0,
+#           "score_location": 9.4,
+#           "score_staff": 8.6,
+#           "score_value_for_money": 8.8
+#         },
+#         {
+#           "review_id": "20757",
+#           "review_text": "Turn close executive certainly heavy vote. Office ago tree seven.\nArrive something head wait clearly. His whom section my knowledge get simple.",
+#           "review_date": "2025-12-29",
+#           "score_overall": 8.9,
+#           "score_cleanliness": 9.1,
+#           "score_comfort": 8.1,
+#           "score_facilities": 8.9,
+#           "score_location": 9.4,
+#           "score_staff": 9.2,
+#           "score_value_for_money": 8.7
+#         }
+#       ]
+#     }
+#   }
+
+# }
+
 
 
 # Alternative: If your Task 2 only implements baseline OR embeddings (not both yet)
