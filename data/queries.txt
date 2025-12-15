@@ -16,7 +16,7 @@ LIMIT $limit
 MATCH (h:Hotel) WHERE toLower(h.name) CONTAINS toLower($q)
 OPTIONAL MATCH (h)-[:LOCATED_IN]->(c:City)
 OPTIONAL MATCH (c)-[:LOCATED_IN]->(country:Country)
-RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating, c.name AS city, country.name AS country 
+RETURN h.hotel_id AS hotel_id, h.name AS name, h.star_rating AS star_rating, c.name AS city, country.name AS country
 LIMIT $limit
 
 -- name: hotels_by_country

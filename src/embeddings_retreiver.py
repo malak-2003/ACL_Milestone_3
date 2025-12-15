@@ -192,7 +192,7 @@ class NodeEmbeddingGenerator:
             for hotel_id, embedding in tqdm(embeddings.items()):
                 session.run(query, {
                     "hotel_id": hotel_id,
-                    "embedding": embedding.tolist()
+                    "embedding": np.array(embedding, dtype=np.float32).tolist()
                 })
         
         print(f"Stored {len(embeddings)} embeddings in Neo4j")
@@ -254,8 +254,11 @@ class EmbeddingRetriever:
         self.driver.close()
     
     def embed_query(self, query: str) -> np.ndarray:
-        return self.model.encode(query, convert_to_numpy=True)
-    
+        vec = self.model.encode(query, convert_to_numpy=True)
+        vec = np.array(vec, dtype=np.float32)
+        norm = np.linalg.norm(vec)
+        return vec / norm if norm > 0 else vec
+
     def find_similar_hotels_vector_index(self, query_embedding: np.ndarray, 
                                         limit: int = 10) -> List[Dict]:
         index_name = f"hotel_embeddings_{self.model_name}"
