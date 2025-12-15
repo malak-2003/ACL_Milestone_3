@@ -1,4 +1,3 @@
-# src/baseline_retreiver.py
 import os
 import sys
 from neo4j import GraphDatabase
@@ -6,9 +5,6 @@ from typing import Dict, Any
 from pathlib import Path
 from Create_kg import load_config
 
-# -------------------------
-# Query file loader
-# -------------------------
 def load_queries(path: str) -> Dict[str, str]:
     queries = {}
     p = Path(path)
@@ -31,10 +27,6 @@ def load_queries(path: str) -> Dict[str, str]:
     if current_name and buffer:
         queries[current_name] = "\n".join(buffer).strip()
     return queries
-
-# -------------------------
-# Baseline retriever
-# -------------------------
 
 DEFAULT_LIMIT = 5
 
@@ -65,61 +57,154 @@ class BaselineRetriever:
             result = session.run(cypher, params)
             return [record.data() for record in result]
 
+    def get_reviews_for_hotels(self, hotel_ids: list, limit: int = 3):
+        if not hotel_ids:
+            return {}
+        
+        cypher = """
+        UNWIND $hotel_ids AS hid
+        MATCH (h:Hotel {hotel_id: hid})<-[:REVIEWED]-(r:Review)
+        WITH h, r
+        ORDER BY coalesce(r.date, r.review_date) DESC
+        WITH h.hotel_id AS hotel_id, collect(r)[0..3] AS reviews
+        RETURN hotel_id, reviews
+        """
+        
+        results = self.run_query(cypher, {"hotel_ids": hotel_ids})
+        reviews_map = {}
+        for record in results:
+            hotel_id = record["hotel_id"]
+            reviews = record["reviews"]
+            reviews_list = []
+            for r in reviews:
+                reviews_list.append({
+                    "review_id": r.get("review_id"),
+                    "review_text": r.get("text") or r.get("review_text") or "",
+                    "review_date": r.get("date") or r.get("review_date") or "",
+                    "score_overall": r.get("score_overall"),
+                    "score_cleanliness": r.get("score_cleanliness"),
+                    "score_comfort": r.get("score_comfort"),
+                    "score_facilities": r.get("score_facilities"),
+                    "score_location": r.get("score_location"),
+                    "score_staff": r.get("score_staff"),
+                    "score_value_for_money": r.get("score_value_for_money")
+                })
+            reviews_map[hotel_id] = reviews_list
+        return reviews_map
+
     def retrieve(self, intent: str, entities: Dict[str, Any]):
         params = {}
         tpl = None
 
-        if intent in ("recommendation", "hotel_search"):
-            if entities.get("city"):
-                if entities.get("min_rating"):
+        if intent == "hotels_by_score_range":
+            tpl = self.queries.get("hotels_by_score_range")
+            params["min_score"] = entities.get("min_score", 0.0)
+            params["max_score"] = entities.get("max_score", 10.0)
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+        
+        elif intent == "best_value_hotels":
+            tpl = self.queries.get("best_value_hotels")
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+        
+        elif intent == "hotels_by_location_score":
+            tpl = self.queries.get("hotels_by_location_score")
+            params["min_location_score"] = entities.get("min_location_score", 9.0)
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+        
+        elif intent == "hotels_with_best_staff":
+            tpl = self.queries.get("hotels_with_best_staff")
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+
+        elif intent in ("recommendation", "hotel_search"):
+            if entities.get("country") or entities.get("countries"):
+                country_val = entities.get("country") or (entities.get("countries")[0] if entities.get("countries") else None)
+                if country_val:
+                    tpl = self.queries.get("hotels_by_country")
+                    params["country"] = country_val
+                    params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+            elif entities.get("city") or entities.get("cities"):
+                city_val = entities.get("city") or (entities.get("cities")[0] if entities.get("cities") else None)
+                if entities.get("min_rating") is not None:
                     tpl = self.queries.get("hotels_in_city_min_rating")
-                    params["city"] = entities["city"]
-                    params["min_rating"] = entities["min_rating"]
+                    params["city"] = city_val
+                    params["min_rating"] = entities.get("min_rating")
                     params["limit"] = entities.get("limit", DEFAULT_LIMIT)
                 else:
                     tpl = self.queries.get("hotels_in_city")
-                    params["city"] = entities["city"]
+                    params["city"] = city_val
                     params["limit"] = entities.get("limit", DEFAULT_LIMIT)
-            elif entities.get("hotel_name") or entities.get("hotel_id"):
+            elif entities.get("hotel_name") or entities.get("hotel_id") or entities.get("q"):
                 tpl = self.queries.get("hotel_by_name")
-                params["q"] = entities.get("hotel_name") or entities.get("hotel_id")
+                params["q"] = entities.get("hotel_name") or entities.get("hotel_id") or entities.get("q")
                 params["limit"] = entities.get("limit", DEFAULT_LIMIT)
             else:
                 tpl = self.queries.get("top_hotels")
                 params["limit"] = entities.get("limit", DEFAULT_LIMIT)
 
-        # Review lookup
         elif intent == "review_lookup":
             if entities.get("hotel_id"):
                 tpl = self.queries.get("hotel_reviews")
                 params["hotel_id"] = entities["hotel_id"]
                 params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+            elif entities.get("hotel_name") or entities.get("q"):
+                name_q = entities.get("hotel_name") or entities.get("q")
+                name_tpl = self.queries.get("hotel_by_name")
+                if name_tpl:
+                    hits = self.run_query(name_tpl, {"q": name_q, "limit": 1})
+                    if hits:
+                        params["hotel_id"] = hits[0].get("hotel_id")
+                        tpl = self.queries.get("hotel_reviews")
+                        params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+                    else:
+                        return []
+                else:
+                    return []
             else:
                 return []
 
-        # Visa queries
-        elif intent == "visa_query":
-            if entities.get("country_from") and entities.get("country_to"):
-                tpl = self.queries.get("visa_requirement")
-                params["from"] = entities["country_from"]
-                params["to"] = entities["country_to"]
-            else:
-                return []
+        elif intent == "hotels_with_min_reviews" or entities.get("min_reviews") is not None:
+            tpl = self.queries.get("hotels_with_min_reviews")
+            params["min_reviews"] = entities.get("min_reviews")
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
 
-        # Facility-based search
-        elif intent == "facility_search":
+        elif intent in ("traveller_query", "traveller_type_preferences"):
+            type_val = entities.get("type") or entities.get("traveler_type") or (entities.get("traveler_types")[0] if entities.get("traveler_types") else None)
+            if not type_val:
+                return []
+            cypher = (
+                "MATCH (t:Traveller)-[:STAYED_AT]->(h:Hotel) "
+                "WHERE toLower(t.type) = toLower($type) "
+                "WITH h, count(*) AS visits "
+                "OPTIONAL MATCH (h)-[:LOCATED_IN]->(c:City) "
+                "OPTIONAL MATCH (c)-[:LOCATED_IN]->(country:Country) "
+                "RETURN h.hotel_id AS hotel_id, h.name AS name, visits, c.name AS city, country.name AS country "
+                "ORDER BY visits DESC LIMIT $limit"
+            )
+            params["type"] = type_val
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+            return self.run_query(cypher, params)
+
+        elif intent == "facility_search" or intent == "amenity_filtering":
             if entities.get("min_facility_score") is not None:
                 tpl = self.queries.get("hotels_by_avg_facilities_score")
-                params["min_facility_score"] = entities["min_facility_score"]
+                params["min_facility_score"] = entities.get("min_facility_score")
                 params["limit"] = entities.get("limit", DEFAULT_LIMIT)
-            elif entities.get("facility"):
-                tpl = self.queries.get("hotels_with_facility")
-                params["facility"] = entities["facility"]
+            elif entities.get("facility") or entities.get("facilities") or entities.get("facility_ratings"):
+                tpl = self.queries.get("hotels_by_avg_facilities_score")
+                min_score = None
+                if entities.get("min_facility_score") is not None:
+                    min_score = entities["min_facility_score"]
+                elif entities.get("facility_ratings"):
+                    vals = list(entities["facility_ratings"].values())
+                    if vals:
+                        min_score = max(vals)
+                if min_score is None:
+                    return []
+                params["min_facility_score"] = min_score
                 params["limit"] = entities.get("limit", DEFAULT_LIMIT)
             else:
                 return []
 
-        # Fallback / QA
         else:
             tpl = self.queries.get("hotel_by_name")
             params["q"] = entities.get("city") or entities.get("hotel_name") or ""
@@ -128,11 +213,16 @@ class BaselineRetriever:
         if tpl is None:
             raise ValueError(f"No Cypher template found for chosen intent. Available templates: {list(self.queries.keys())}")
 
-        return self.run_query(tpl, params)
+        results = self.run_query(tpl, params)
+        
+        if results and intent not in ["review_lookup", "hotel_reviews"]:
+            hotel_ids = [r.get("hotel_id") for r in results if r.get("hotel_id")]
+            reviews_map = self.get_reviews_for_hotels(hotel_ids, limit=3)
+            for r in results:
+                r["reviews"] = reviews_map.get(r.get("hotel_id"), [])
+        
+        return results
 
-# -------------------------
-# Demo runner (quick test)
-# -------------------------
 
 def demo(config_path=None, queries_path=None):
     tests = [
@@ -142,10 +232,8 @@ def demo(config_path=None, queries_path=None):
         ("Top hotels (by star_rating)", "hotel_search", {"limit": 5}),
         ("Hotels by country (Egypt)", "hotel_search", {"country": "Egypt", "limit": 5}),
         ("Most reviewed hotels in city (Cairo)", "hotel_search", {"city": "Cairo", "limit": 5}),
-        ("Visa requirement Egypt -> France", "visa_query", {"country_from": "Egypt", "country_to": "France"}),
         ("Traveller type preferences (business)", "traveller_query", {"type": "business", "limit": 5}),
-        ("Hotels with >= 100 reviews", "hotel_search", {"min_reviews": 100, "limit": 10, "intent_template": "hotels_with_min_reviews"}),
-        ("Most active reviewers", "hotel_search", {"limit": 10, "intent_template": "most_active_reviewers"}),
+        ("Hotels with >= 100 reviews", "hotel_search", {"min_reviews": 100, "limit": 10}),
     ]
 
     retriever = BaselineRetriever(config_path=config_path, queries_path=queries_path)
@@ -163,10 +251,9 @@ def demo(config_path=None, queries_path=None):
 
             print("Results count:", len(results))
             if not results:
-                print("  <-- No results returned. Try the exploratory queries below to find valid city/hotel_id values.")
+                print("  <-- No results returned.")
                 continue
 
-            # Print up to 3 sample rows
             for i, r in enumerate(results[:3], start=1):
                 print(f" Sample {i}:", r)
     finally:
