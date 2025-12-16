@@ -317,6 +317,14 @@ class HybridHotelSearchPipeline:
         
         return output
 
+def retrieve_hotels(query: str, config_path: str = None, queries_path: str = None) -> Dict[str, Any]:
+    pipeline = HybridHotelSearchPipeline(config_path=config_path, queries_path=queries_path)
+    
+    try:
+        result = pipeline.process_query(query)
+        return result
+    finally:
+        pipeline.close()
 
 def interactive_mode(config_path=None, queries_path=None):
     print("\n" + "="*80)
@@ -369,45 +377,54 @@ def batch_mode(queries_file: str, config_path=None, queries_path=None):
 
 
 def main():
-    import argparse
+    # import argparse
     
-    parser = argparse.ArgumentParser(
-        description="Hybrid Hotel Search Pipeline - Baseline + Embeddings"
-    )
-    parser.add_argument(
-        '--mode',
-        choices=['interactive', 'batch'],
-        default='interactive',
-        help='Execution mode (default: interactive)'
-    )
-    parser.add_argument(
-        '--config',
-        type=str,
-        default=None,
-        help='Path to config.txt'
-    )
-    parser.add_argument(
-        '--queries',
-        type=str,
-        default=None,
-        help='Path to queries.txt'
-    )
-    parser.add_argument(
-        '--batch-file',
-        type=str,
-        default=None,
-        help='Path to file containing queries (one per line) for batch mode'
-    )
+    # parser = argparse.ArgumentParser(
+    #     description="Hybrid Hotel Search Pipeline - Baseline + Embeddings"
+    # )
+    # parser.add_argument(
+    #     '--mode',
+    #     choices=['interactive', 'batch'],
+    #     default='interactive',
+    #     help='Execution mode (default: interactive)'
+    # )
+    # parser.add_argument(
+    #     '--config',
+    #     type=str,
+    #     default=None,
+    #     help='Path to config.txt'
+    # )
+    # parser.add_argument(
+    #     '--queries',
+    #     type=str,
+    #     default=None,
+    #     help='Path to queries.txt'
+    # )
+    # parser.add_argument(
+    #     '--batch-file',
+    #     type=str,
+    #     default=None,
+    #     help='Path to file containing queries (one per line) for batch mode'
+    # )
     
-    args = parser.parse_args()
+    # args = parser.parse_args()
     
-    if args.mode == 'interactive':
-        interactive_mode(config_path=args.config, queries_path=args.queries)
-    elif args.mode == 'batch':
-        if not args.batch_file:
-            print("Error: --batch-file required for batch mode")
-            return
-        batch_mode(args.batch_file, config_path=args.config, queries_path=args.queries)
+    # if args.mode == 'interactive':
+    #     interactive_mode(config_path=args.config, queries_path=args.queries)
+    # elif args.mode == 'batch':
+    #     if not args.batch_file:
+    #         print("Error: --batch-file required for batch mode")
+    #         return
+    #     batch_mode(args.batch_file, config_path=args.config, queries_path=args.queries)
+    test_query = "Show me The Royal Compass"
+    
+    print("Testing retrieve_hotels function...")
+    result = retrieve_hotels(test_query)
+    
+    print("\n" + "="*80)
+    print("FINAL OUTPUT:")
+    print("="*80)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
