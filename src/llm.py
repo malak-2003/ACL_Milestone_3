@@ -20,87 +20,112 @@ FREE_MODELS = {
 }
 
 
-# def merge_retrieval_results(baseline_results: Dict, embedding_results: Dict) -> Dict:
-#     """Merge and deduplicate results from baseline and embeddings."""
+
+from typing import Dict, List
+
+# def merge_retrieval_results(results: Dict) -> Dict:
+#     """
+#     Merge and deduplicate results from baseline, minilm, and mpnet
+#     """
 #     all_nodes = {}
-#     all_relationships = []
-#     all_reviews = []
-    
-#     # Process baseline results
-#     if baseline_results:
-#         for node in baseline_results.get("nodes", []):
-#             node_id = node.get("id")
-#             if node_id:
-#                 all_nodes[node_id] = node.copy()
-#                 all_nodes[node_id]["source"] = "baseline"
-        
-#         all_relationships.extend(baseline_results.get("relationships", []))
-#         all_reviews.extend(baseline_results.get("reviews", []))
-    
-#     # Process embedding results
-#     if embedding_results:
-#         for node in embedding_results.get("similar_nodes", []):
-#             node_id = node.get("id")
-#             if node_id:
-#                 if node_id in all_nodes:
-#                     all_nodes[node_id]["source"] = "both"
-#                     all_nodes[node_id]["similarity_score"] = node.get("similarity_score")
-#                 else:
-#                     node_copy = node.copy()
-#                     node_copy["source"] = "embeddings"
-#                     all_nodes[node_id] = node_copy
-        
-#         all_reviews.extend(embedding_results.get("reviews", []))
-    
-#     # Deduplicate reviews
-#     unique_reviews = {(r.get("hotel_id"), r.get("text")): r for r in all_reviews}
-    
+#     all_reviews = {}
+
+#     for source_name, source_data in results.items():
+#         if not source_data:
+#             continue
+
+#         # -------- Nodes --------
+#         for node in source_data.get("nodes", []):
+#             hotel_id = node.get("hotel_id")
+#             if not hotel_id:
+#                 continue
+
+#             if hotel_id not in all_nodes:
+#                 node_copy = node.copy()
+#                 node_copy["id"] = hotel_id
+#                 node_copy["source"] = source_name
+#                 node_copy["reviews"] = []  # ADD THIS: Initialize reviews list
+#                 all_nodes[hotel_id] = node_copy
+#             else:
+#                 existing = all_nodes[hotel_id]
+#                 existing["source"] = "both"
+
+#                 if "similarity_score" in node:
+#                     best = max(
+#                         existing.get("similarity_score", 0),
+#                         node.get("similarity_score", 0)
+#                     )
+#                     existing["similarity_score"] = best
+
+#         # -------- Reviews --------
+#         # FIX: Associate reviews with their hotels
+#         hotel_nodes = source_data.get("nodes", [])
+#         if hotel_nodes:
+#             # Assuming reviews in this source belong to the hotels in this source
+#             hotel_id = hotel_nodes[0].get("hotel_id")  # Get the hotel from this source
+            
+#             for review in source_data.get("reviews", []):
+#                 review_id = review.get("review_id")
+#                 if review_id and review_id not in all_reviews:
+#                     review_copy = review.copy()
+#                     review_copy["hotel_id"] = hotel_id  # ADD hotel_id to review
+#                     all_reviews[review_id] = review_copy
+                    
+#                     # Also add to the node's review list
+#                     if hotel_id in all_nodes:
+#                         all_nodes[hotel_id]["reviews"].append(review_copy)
+
 #     return {
 #         "nodes": list(all_nodes.values()),
-#         "relationships": all_relationships,
-#         "reviews": list(unique_reviews.values()),
+#         "reviews": list(all_reviews.values()),
 #         "total_sources": {
-#             "baseline_only": sum(1 for n in all_nodes.values() if n.get("source") == "baseline"),
-#             "embeddings_only": sum(1 for n in all_nodes.values() if n.get("source") == "embeddings"),
-#             "both": sum(1 for n in all_nodes.values() if n.get("source") == "both"),
+#             "baseline_only": sum(
+#                 1 for n in all_nodes.values() if n["source"] == "baseline"
+#             ),
+#             "embeddings_only": sum(
+#                 1 for n in all_nodes.values()
+#                 if n["source"] in {"minilm", "mpnet"}
+#             ),
+#             "both": sum(
+#                 1 for n in all_nodes.values() if n["source"] == "both"
+#             ),
 #         }
 #     }
 
 
-# def format_context(nodes: List[Dict], relationships: List[Dict], reviews: List[Dict]) -> str:
-#     """Format combined retrieval results into human-readable context."""
+# def format_context(nodes: List[Dict], reviews: List[Dict]) -> str:
 #     blocks = []
-    
+
 #     for node in nodes:
 #         source = node.get("source", "unknown")
 #         similarity = node.get("similarity_score")
-        
-#         source_info = f" [Retrieved via: {source}"
-#         if similarity:
+
+#         source_info = f"[Source: {source}"
+#         if similarity is not None:
 #             source_info += f", similarity: {similarity:.2f}"
 #         source_info += "]"
-        
-#         blocks.append(f"""Hotel ID: {node.get('id')}
+
+#         hotel_block = f"""Hotel ID: {node.get('id')}
 # Name: {node.get('name')}
 # City: {node.get('city')}, {node.get('country')}
-# Rating: {node.get('rating')}/5
-# Description: {node.get('description')}{source_info}""")
-    
-#     if relationships:
-#         blocks.append("\n--- Relationships ---")
-#         for rel in relationships:
-#             blocks.append(f"{rel.get('start')} --[{rel.get('type')}]--> {rel.get('end')}")
-    
-#     if reviews:
-#         blocks.append("\n--- Reviews ---")
-#         for review in reviews:
-#             blocks.append(f"Review for Hotel {review.get('hotel_id')}: \"{review.get('text')}\" (Score: {review.get('score')}/5)")
-    
+# Stars: {node.get('star_rating')}
+# {source_info}"""
+
+#         # Add reviews for THIS hotel
+#         hotel_reviews = node.get("reviews", [])
+#         if hotel_reviews:
+#             hotel_block += "\n\nReviews for this hotel:"
+#             for r in hotel_reviews:
+#                 hotel_block += f"""
+#   - Review ID: {r.get('review_id')}
+#     Text: "{r.get('review_text')}"
+#     Overall Score: {r.get('score_overall')}/10
+#     Date: {r.get('review_date')}"""
+        
+#         blocks.append(hotel_block)
+
 #     return "\n\n".join(blocks)
 
-
-
-from typing import Dict, List
 
 def merge_retrieval_results(results: Dict) -> Dict:
     """
@@ -171,63 +196,6 @@ def merge_retrieval_results(results: Dict) -> Dict:
         }
     }
 
-# def merge_retrieval_results(results: Dict) -> Dict:
-#     """
-#     Merge and deduplicate results from baseline, minilm, and mpnet
-#     """
-#     all_nodes = {}
-#     all_reviews = {}
-
-#     for source_name, source_data in results.items():
-#         if not source_data:
-#             continue
-
-#         # -------- Nodes --------
-#         for node in source_data.get("nodes", []):
-#             hotel_id = node.get("hotel_id")
-#             if not hotel_id:
-#                 continue
-
-#             if hotel_id not in all_nodes:
-#                 node_copy = node.copy()
-#                 node_copy["id"] = hotel_id
-#                 node_copy["source"] = source_name
-#                 all_nodes[hotel_id] = node_copy
-#             else:
-#                 # Seen before → mark as multiple sources
-#                 existing = all_nodes[hotel_id]
-#                 existing["source"] = "both"
-
-#                 # Keep best similarity score if exists
-#                 if "similarity_score" in node:
-#                     best = max(
-#                         existing.get("similarity_score", 0),
-#                         node.get("similarity_score", 0)
-#                     )
-#                     existing["similarity_score"] = best
-
-#         # -------- Reviews --------
-#         for review in source_data.get("reviews", []):
-#             review_id = review.get("review_id")
-#             if review_id:
-#                 all_reviews[review_id] = review
-
-#     return {
-#         "nodes": list(all_nodes.values()),
-#         "reviews": list(all_reviews.values()),
-#         "total_sources": {
-#             "baseline_only": sum(
-#                 1 for n in all_nodes.values() if n["source"] == "baseline"
-#             ),
-#             "embeddings_only": sum(
-#                 1 for n in all_nodes.values()
-#                 if n["source"] in {"minilm", "mpnet"}
-#             ),
-#             "both": sum(
-#                 1 for n in all_nodes.values() if n["source"] == "both"
-#             ),
-#         }
-#     }
 
 def format_context(nodes: List[Dict], reviews: List[Dict]) -> str:
     blocks = []
@@ -263,73 +231,6 @@ Stars: {node.get('star_rating')}
     return "\n\n".join(blocks)
 
 
-# def format_context(nodes: List[Dict], reviews: List[Dict]) -> str:
-#     blocks = []
-
-#     for node in nodes:
-#         source = node.get("source", "unknown")
-#         similarity = node.get("similarity_score")
-
-#         source_info = f"[Source: {source}"
-#         if similarity is not None:
-#             source_info += f", similarity: {similarity:.2f}"
-#         source_info += "]"
-
-#         blocks.append(
-#             f"""Hotel ID: {node.get('id')}
-# Name: {node.get('name')}
-# City: {node.get('city')}, {node.get('country')}
-# Stars: {node.get('star_rating')}
-# {source_info}"""
-#         )
-
-#     if reviews:
-#         blocks.append("\n--- Reviews ---")
-#         for r in reviews:
-#             blocks.append(
-#                 f"""Review ID: {r.get('review_id')}
-# Text: "{r.get('review_text')}"
-# Overall Score: {r.get('score_overall')}/10
-# Date: {r.get('review_date')}
-# """
-#             )
-
-#     return "\n\n".join(blocks)
-
-
-# def format_context(nodes: List[Dict], reviews: List[Dict]) -> str:
-#     blocks = []
-
-#     for node in nodes:
-#         source = node.get("source", "unknown")
-#         similarity = node.get("similarity_score")
-
-#         source_info = f"[Source: {source}"
-#         if similarity is not None:
-#             source_info += f", similarity: {similarity:.2f}"
-#         source_info += "]"
-
-#         blocks.append(
-#             f"""Hotel ID: {node.get('id')}
-# Name: {node.get('name')}
-# City: {node.get('city')}, {node.get('country')}
-# Stars: {node.get('star_rating')}
-# {source_info}"""
-#         )
-
-#     if reviews:
-#         blocks.append("\n--- Reviews ---")
-#         for r in reviews:
-#             blocks.append(
-#                 f"""Review ID: {r.get('review_id')}
-# Text: "{r.get('review_text')}"
-# Overall Score: {r.get('score_overall')}/10
-# Date: {r.get('review_date')}
-# """
-#             )
-
-#     return "\n\n".join(blocks)
-
 
 def build_prompt(query: str, context: str) -> str:
     """Final optimized prompt - balanced and clear."""
@@ -349,101 +250,6 @@ IMPORTANT INSTRUCTIONS:
 USER QUESTION: {query}
 
 YOUR ANSWER (write naturally, like speaking to a traveler):"""
-# def build_prompt(query: str, context: str) -> str:
-#     """Universal prompt optimized for all models."""
-#     return f"""You are a professional hotel information assistant providing accurate, helpful responses to travelers.
-
-# HOTEL DATA AVAILABLE:
-# {context}
-
-# YOUR TASK:
-# Answer the user's question using ONLY the information provided above.
-
-# MANDATORY RULES:
-# 1. Base your answer exclusively on the data above - do not invent, assume, or infer any details
-# 2. DO NOT mention: amenities (pools, gyms, spas), nearby landmarks, transportation, or features not explicitly stated
-# 3. DO NOT make generalizations like "guests loved" or "travelers praised" unless directly quoting a review
-# 4. DO NOT interpret unclear review text as hotel features or qualities
-# 5. If review text seems unusual or unclear, you may note this briefly but do not try to interpret it
-# 6. DO NOT invent any details or reviews
-# 7. DO NOT hallucinate
-
-# WHAT TO INCLUDE:
-# - Hotel name, city, country, and star rating
-# - ALL review scores mentioned (e.g., "scores of 8.9/10, 9.1/10, and 9.0/10")
-# - Specific review dates if relevant
-# - Direct quotes from reviews and mention if they are meaningless
-# - If multiple hotels match, provide information on each and compare between them.
-
-
-# RESPONSE FORMAT:
-# - Write 70-90 words
-# - Use natural, conversational language (not bullet points or raw data)
-# - Be specific with numbers and dates
-# - Acknowledge limitations if data is unclear or insufficient
-
-# GOOD EXAMPLE:
-# "The Ocean View Resort is a 4-star hotel in Miami, Florida. Recent reviews from December 2024 show overall scores of 9.2/10, 8.8/10, and 9.5/10. Reviewers consistently rated cleanliness at 9.4/10 and location at 9.6/10. One guest noted 'excellent beachfront access and spacious rooms.' The hotel maintains high scores across all categories based on the available reviews."
-
-# BAD EXAMPLES:
-# ❌ "The hotel has stunning views and friendly staff" (inventing details)
-# ❌ "Located near the city center and major attractions" (assuming location details)
-# ❌ "Guests praised the amenities and service" (vague generalization)
-# ❌ "Review ID: 12345, Score: 9.2" (raw data format)
-
-# USER QUESTION: {query}
-
-# YOUR RESPONSE (70-90 words, factual and helpful):"""
-
-# def build_prompt(query: str, context: str) -> str:
-#     """Build structured prompt with clear instructions and examples."""
-#     return f"""You are a knowledgeable hotel booking assistant helping travelers find their perfect accommodation.
-
-# CONTEXT - Hotel Information Retrieved:
-# {context}
-
-# INSTRUCTIONS:
-# 1. Answer the user's question naturally and conversationally
-# 2. Use ONLY information from the context above - never invent details
-# 3. If a detail is not mentioned, say "not specified" or skip it
-# 4. NEVER invent details like amenities, nearby landmarks, or features
-# 5. Quote review text EXACTLY as written, even if it seems unusual
-# 6. If reviews seem unclear, acknowledge that
-# 7. Present information in a helpful, narrative format (NOT as raw data dumps)
-# 8. Include relevant details like:
-#    - Hotel name, location, and star rating
-#    - Overall ratings and specific scores (cleanliness, comfort, location, etc.)
-#    - Key highlights from recent reviews
-#    - Any comparisons if multiple hotels are mentioned
-# 9. If information is missing from context, acknowledge it naturally
-# 10. Keep your response between 50-150 words
-# 11. Be specific with numbers (e.g., "8.9/10" not just "high rating")
-# 12. Do not hallucinate
-
-# EXAMPLE GOOD RESPONSE:
-# "The Sunset Plaza is a 4-star hotel in Barcelona, Spain. It has an excellent overall rating of 9.2/10, with guests particularly praising its cleanliness (9.5/10) and prime location (9.4/10). Recent reviews highlight the 'stunning rooftop views' and 'attentive staff.' However, some guests noted the rooms could be larger."
-
-# EXAMPLE BAD RESPONSE:
-# "Review ID: 12345, Score: 9.2, Date: 2025-12-30" ❌ (Too raw/technical)
-# "It's a good hotel." ❌ (Too vague)
-
-# USER QUESTION: {query}
-
-# YOUR RESPONSE:"""
-
-# def build_prompt(query: str, context: str) -> str:
-#     """Build structured prompt with persona, context, and task."""
-#     return f"""You are a helpful travel assistant specialized in hotel recommendations.
-
-# Context (Retrieved from Knowledge Graph):
-# {context}
-
-# Task: Answer the user's question using ONLY the information provided above. Be concise, accurate, and helpful. If the information needed to answer is not in the context, clearly state that you don't have enough information.
-
-# User Question: {query}
-
-# Answer:"""
-
 
 def evaluate_answer_quality(answer: str, query: str, context: str) -> Dict:
     """Comprehensive evaluation of answer quality."""
@@ -593,79 +399,6 @@ def generate_answers_with_all_models(retrieval_result: Dict, retrieval_methods: 
         "filtered_raw_data": filtered_results,  # Add filtered raw data for UI display
         "results": outputs
     }
-# def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
-#     if not HF_API_KEY:
-#         raise ValueError("HF_API_KEY not found")
-
-#     print("\n🔄 Merging retrieval results...")
-#     merged_data = merge_retrieval_results(
-#         retrieval_result["results"]
-#     )
-
-#     print(f"   ✅ Combined {len(merged_data['nodes'])} unique nodes")
-#     print(f"   📊 Sources: {merged_data['total_sources']}")
-
-#     context = format_context(
-#         merged_data["nodes"],
-#         merged_data["reviews"]
-#     )
-#     print("Context!!!")
-#     print(context)
-
-
-#     query = retrieval_result["query"]
-#     prompt = build_prompt(query, context)
-
-#     client = InferenceClient(token=HF_API_KEY)
-#     outputs = {}
-
-#     for model_name, model_id in FREE_MODELS.items():
-#         print(f"\n🔄 Querying {model_name}...")
-#         try:
-#             start = time.time()
-
-#             response = client.chat_completion(
-#                 model=model_id,
-#                 messages=[{"role": "user", "content": prompt}],
-#                 max_tokens=300,
-#                 temperature=0.1
-#             )
-
-#             answer = response.choices[0].message.content.strip()
-#             elapsed = time.time() - start
-
-#             metrics = evaluate_answer_quality(answer, query, context)
-
-#             outputs[model_name] = {
-#                 "model_id": model_id,
-#                 "answer": answer,
-#                 "response_time": round(elapsed, 2),
-#                 "quality_metrics": metrics,
-#                 "status": "success"
-#             }
-
-#             print(f"✅ {model_name} done ({elapsed:.2f}s)")
-
-#         except Exception as e:
-#             outputs[model_name] = {
-#                 "model_id": model_id,
-#                 "error": str(e),
-#                 "status": "failed"
-#             }
-
-#         time.sleep(1)
-
-#     return {
-#         "query": query,
-#         "retrieval_stats": {
-#             "total_nodes": len(merged_data["nodes"]),
-#             "total_reviews": len(merged_data["reviews"]),
-#             "source_breakdown": merged_data["total_sources"]
-#         },
-#         "context": context,
-#         "results": outputs
-#     }
-
 
 
 
@@ -1188,11 +921,11 @@ if __name__ == "__main__":
         exit(1)
     
     result = generate_answers_with_all_models(example_retrieval_result)
-    # print(result)
-    # print_detailed_comparison(result)
+    print(result)
+    print_detailed_comparison(result)
 
-    models_data = get_ui_response(result)
-    print(models_data)
+    # models_data = get_ui_response(result)
+    # print(models_data)
     # ui_result=get_ui_response(result)
     # print(ui_result)
     
