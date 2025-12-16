@@ -127,6 +127,76 @@ from typing import Dict, List
 #     return "\n\n".join(blocks)
 
 
+# def merge_retrieval_results(results: Dict) -> Dict:
+#     """
+#     Merge and deduplicate results from baseline, minilm, and mpnet
+#     """
+#     all_nodes = {}
+#     all_reviews = {}
+
+#     for source_name, source_data in results.items():
+#         if not source_data:
+#             continue
+
+#         # -------- Nodes --------
+#         for node in source_data.get("nodes", []):
+#             hotel_id = node.get("hotel_id")
+#             if not hotel_id:
+#                 continue
+
+#             if hotel_id not in all_nodes:
+#                 node_copy = node.copy()
+#                 node_copy["id"] = hotel_id
+#                 node_copy["source"] = source_name
+#                 node_copy["reviews"] = []  # ADD THIS: Initialize reviews list
+#                 all_nodes[hotel_id] = node_copy
+#             else:
+#                 existing = all_nodes[hotel_id]
+#                 existing["source"] = "both"
+
+#                 if "similarity_score" in node:
+#                     best = max(
+#                         existing.get("similarity_score", 0),
+#                         node.get("similarity_score", 0)
+#                     )
+#                     existing["similarity_score"] = best
+
+#         # -------- Reviews --------
+#         # FIX: Associate reviews with their hotels
+#         hotel_nodes = source_data.get("nodes", [])
+#         if hotel_nodes:
+#             # Assuming reviews in this source belong to the hotels in this source
+#             hotel_id = hotel_nodes[0].get("hotel_id")  # Get the hotel from this source
+            
+#             for review in source_data.get("reviews", []):
+#                 review_id = review.get("review_id")
+#                 if review_id and review_id not in all_reviews:
+#                     review_copy = review.copy()
+#                     review_copy["hotel_id"] = hotel_id  # ADD hotel_id to review
+#                     all_reviews[review_id] = review_copy
+                    
+#                     # Also add to the node's review list
+#                     if hotel_id in all_nodes:
+#                         all_nodes[hotel_id]["reviews"].append(review_copy)
+
+#     return {
+#         "nodes": list(all_nodes.values()),
+#         "reviews": list(all_reviews.values()),
+#         "total_sources": {
+#             "baseline_only": sum(
+#                 1 for n in all_nodes.values() if n["source"] == "baseline"
+#             ),
+#             "embeddings_only": sum(
+#                 1 for n in all_nodes.values()
+#                 if n["source"] in {"minilm", "mpnet"}
+#             ),
+#             "both": sum(
+#                 1 for n in all_nodes.values() if n["source"] == "both"
+#             ),
+#         }
+#     }
+
+
 def merge_retrieval_results(results: Dict) -> Dict:
     """
     Merge and deduplicate results from baseline, minilm, and mpnet
@@ -148,7 +218,7 @@ def merge_retrieval_results(results: Dict) -> Dict:
                 node_copy = node.copy()
                 node_copy["id"] = hotel_id
                 node_copy["source"] = source_name
-                node_copy["reviews"] = []  # ADD THIS: Initialize reviews list
+                node_copy["reviews"] = []  # Initialize empty reviews list
                 all_nodes[hotel_id] = node_copy
             else:
                 existing = all_nodes[hotel_id]
@@ -161,23 +231,17 @@ def merge_retrieval_results(results: Dict) -> Dict:
                     )
                     existing["similarity_score"] = best
 
-        # -------- Reviews --------
-        # FIX: Associate reviews with their hotels
-        hotel_nodes = source_data.get("nodes", [])
-        if hotel_nodes:
-            # Assuming reviews in this source belong to the hotels in this source
-            hotel_id = hotel_nodes[0].get("hotel_id")  # Get the hotel from this source
-            
-            for review in source_data.get("reviews", []):
+            # -------- Reviews (from this specific node) --------
+            # FIX: Get reviews from the node itself
+            for review in node.get("reviews", []):
                 review_id = review.get("review_id")
                 if review_id and review_id not in all_reviews:
                     review_copy = review.copy()
-                    review_copy["hotel_id"] = hotel_id  # ADD hotel_id to review
+                    review_copy["hotel_id"] = hotel_id
                     all_reviews[review_id] = review_copy
                     
-                    # Also add to the node's review list
-                    if hotel_id in all_nodes:
-                        all_nodes[hotel_id]["reviews"].append(review_copy)
+                    # Add to the node's review list
+                    all_nodes[hotel_id]["reviews"].append(review_copy)
 
     return {
         "nodes": list(all_nodes.values()),
@@ -344,6 +408,8 @@ def generate_answers_with_all_models(retrieval_result: Dict, retrieval_methods: 
     )
     print("Context!!!")
     print(context)
+    
+
 
     query = retrieval_result["query"]
     prompt = build_prompt(query, context)
