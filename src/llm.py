@@ -810,6 +810,29 @@ def print_detailed_comparison(result: Dict):
                 print(f"   ➡️  Recommendation: Use {best_quality} for quality, {fastest} for speed")
 
 
+def get_ui_response(result: Dict) -> list:
+    """
+    Returns a simple list of dictionaries with model names and responses.
+    
+    Returns:
+        List of dicts: [{"model_name": str, "response": str}, ...]
+    """
+    models = []
+    
+    for model_name, output in result["results"].items():
+        if output["status"] == "success":
+            models.append({
+                "model_name": model_name,
+                "response": output["answer"]
+            })
+        else:
+            models.append({
+                "model_name": model_name,
+                "response": f"Error: {output['error']}"
+            })
+    
+    return models
+
 
 
 # ## 📋 **Complete Metrics Summary**
@@ -973,4 +996,10 @@ if __name__ == "__main__":
         exit(1)
     
     result = generate_answers_with_all_models(example_retrieval_result)
-    print_detailed_comparison(result)
+
+    # Optional: verbose report
+    # print_detailed_comparison(result)
+
+    # UI-friendly output
+    models_data = get_ui_response(result)
+    print(json.dumps(models_data, indent=2))
