@@ -316,15 +316,54 @@ class HybridHotelSearchPipeline:
         print(f"\n{json.dumps(output, indent=2)}")
         
         return output
-
+    
 def retrieve_hotels(query: str, config_path: str = None, queries_path: str = None) -> Dict[str, Any]:
+    """
+    Main entry point for hotel retrieval.
+    Creates a pipeline, processes the query, and returns structured results.
+    """
+    print("\n" + "="*80)
+    print("HOTEL RETRIEVAL SYSTEM")
+    print("="*80)
+    
     pipeline = HybridHotelSearchPipeline(config_path=config_path, queries_path=queries_path)
     
     try:
         result = pipeline.process_query(query)
+        
+        # Verify results before returning
+        print("\n" + "="*80)
+        print("VERIFICATION")
+        print("="*80)
+        baseline_count = len(result.get("results", {}).get("baseline", {}).get("nodes", []))
+        minilm_count = len(result.get("results", {}).get("minilm", {}).get("nodes", []))
+        mpnet_count = len(result.get("results", {}).get("mpnet", {}).get("nodes", []))
+        
+        print(f"✓ Returning {baseline_count + minilm_count + mpnet_count} total hotels")
+        print(f"  - Baseline: {baseline_count}")
+        print(f"  - MiniLM: {minilm_count}")
+        print(f"  - MPNet: {mpnet_count}")
+        
+        if baseline_count == 0 and minilm_count == 0 and mpnet_count == 0:
+            print("\n⚠ WARNING: No results found from any retriever!")
+        
         return result
+    except Exception as e:
+        print(f"\n✗ ERROR in retrieve_hotels: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     finally:
         pipeline.close()
+
+# def retrieve_hotels(query: str, config_path: str = None, queries_path: str = None) -> Dict[str, Any]:
+#     pipeline = HybridHotelSearchPipeline(config_path=config_path, queries_path=queries_path)
+    
+#     try:
+#         result = pipeline.process_query(query)
+#         return result
+#     finally:
+#         pipeline.close()
 
 def interactive_mode(config_path=None, queries_path=None):
     print("\n" + "="*80)

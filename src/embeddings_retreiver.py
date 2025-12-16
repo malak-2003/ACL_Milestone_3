@@ -14,7 +14,7 @@ EMBEDDING_MODELS = {
 }
 
 
-def load_config(path="data/config.txt"):
+def load_config(path="../data/config.txt"):
     config = {}
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -398,7 +398,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Generate node embeddings for hotels")
-    parser.add_argument('--config', type=str, default='data/config.txt',
+    parser.add_argument('--config', type=str, default='../data/config.txt',
                        help='Path to Neo4j config file')
     parser.add_argument('--model', type=str, choices=['minilm', 'mpnet', 'both'],
                        default='both', help='Which embedding model to use')
