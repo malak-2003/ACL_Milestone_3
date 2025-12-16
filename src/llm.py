@@ -491,14 +491,43 @@ def evaluate_answer_quality(answer: str, query: str, context: str) -> Dict:
     return metrics
 
 
-def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
+
+def generate_answers_with_all_models(retrieval_result: Dict, retrieval_methods: list = None) -> Dict:
+    """
+    Generate answers using selected retrieval methods.
+    
+    Args:
+        retrieval_result: Raw retrieval data with baseline, minilm, mpnet results
+        retrieval_methods: List of methods to use. Options: ['baseline', 'minilm', 'mpnet']
+                          If None, uses all available methods (hybrid)
+    
+    Returns:
+        Dict with query, retrieval_stats, context, and model results
+    """
     if not HF_API_KEY:
         raise ValueError("HF_API_KEY not found")
 
-    print("\n🔄 Merging retrieval results...")
-    merged_data = merge_retrieval_results(
-        retrieval_result["results"]
-    )
+    # Default to all methods if not specified (hybrid approach)
+    if retrieval_methods is None:
+        retrieval_methods = ['baseline', 'minilm', 'mpnet']
+    
+    print(f"\n🔄 Using retrieval methods: {', '.join(retrieval_methods)}")
+    
+    # Filter retrieval results based on selected methods
+    filtered_results = {}
+    all_results = retrieval_result.get("results", {})
+    
+    for method in retrieval_methods:
+        if method in all_results:
+            filtered_results[method] = all_results[method]
+        else:
+            print(f"   ⚠️  Warning: {method} not found in retrieval results")
+    
+    if not filtered_results:
+        raise ValueError(f"No valid retrieval methods found. Available: {list(all_results.keys())}")
+    
+    print(f"\n🔄 Merging retrieval results from: {list(filtered_results.keys())}...")
+    merged_data = merge_retrieval_results(filtered_results)
 
     print(f"   ✅ Combined {len(merged_data['nodes'])} unique nodes")
     print(f"   📊 Sources: {merged_data['total_sources']}")
@@ -509,7 +538,6 @@ def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
     )
     print("Context!!!")
     print(context)
-
 
     query = retrieval_result["query"]
     prompt = build_prompt(query, context)
@@ -555,14 +583,88 @@ def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
 
     return {
         "query": query,
+        "retrieval_methods_used": retrieval_methods,
         "retrieval_stats": {
             "total_nodes": len(merged_data["nodes"]),
             "total_reviews": len(merged_data["reviews"]),
             "source_breakdown": merged_data["total_sources"]
         },
         "context": context,
+        "filtered_raw_data": filtered_results,  # Add filtered raw data for UI display
         "results": outputs
     }
+# def generate_answers_with_all_models(retrieval_result: Dict) -> Dict:
+#     if not HF_API_KEY:
+#         raise ValueError("HF_API_KEY not found")
+
+#     print("\n🔄 Merging retrieval results...")
+#     merged_data = merge_retrieval_results(
+#         retrieval_result["results"]
+#     )
+
+#     print(f"   ✅ Combined {len(merged_data['nodes'])} unique nodes")
+#     print(f"   📊 Sources: {merged_data['total_sources']}")
+
+#     context = format_context(
+#         merged_data["nodes"],
+#         merged_data["reviews"]
+#     )
+#     print("Context!!!")
+#     print(context)
+
+
+#     query = retrieval_result["query"]
+#     prompt = build_prompt(query, context)
+
+#     client = InferenceClient(token=HF_API_KEY)
+#     outputs = {}
+
+#     for model_name, model_id in FREE_MODELS.items():
+#         print(f"\n🔄 Querying {model_name}...")
+#         try:
+#             start = time.time()
+
+#             response = client.chat_completion(
+#                 model=model_id,
+#                 messages=[{"role": "user", "content": prompt}],
+#                 max_tokens=300,
+#                 temperature=0.1
+#             )
+
+#             answer = response.choices[0].message.content.strip()
+#             elapsed = time.time() - start
+
+#             metrics = evaluate_answer_quality(answer, query, context)
+
+#             outputs[model_name] = {
+#                 "model_id": model_id,
+#                 "answer": answer,
+#                 "response_time": round(elapsed, 2),
+#                 "quality_metrics": metrics,
+#                 "status": "success"
+#             }
+
+#             print(f"✅ {model_name} done ({elapsed:.2f}s)")
+
+#         except Exception as e:
+#             outputs[model_name] = {
+#                 "model_id": model_id,
+#                 "error": str(e),
+#                 "status": "failed"
+#             }
+
+#         time.sleep(1)
+
+#     return {
+#         "query": query,
+#         "retrieval_stats": {
+#             "total_nodes": len(merged_data["nodes"]),
+#             "total_reviews": len(merged_data["reviews"]),
+#             "source_breakdown": merged_data["total_sources"]
+#         },
+#         "context": context,
+#         "results": outputs
+#     }
 
 
 
