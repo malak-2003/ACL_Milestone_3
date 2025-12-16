@@ -150,9 +150,11 @@ class HybridHotelSearchPipeline:
             "hotels_by_score_range": "hotels_by_score_range",
             "best_value_hotels": "best_value_hotels",
             "hotels_by_location_score": "hotels_by_location_score",
-            "hotels_with_best_staff": "hotels_with_best_staff"
+            "hotels_with_best_staff": "hotels_with_best_staff",
+            "hotels_by_traveler_age_range": "hotels_by_traveler_age_range",
+            "hotels_by_cleanliness_and_reviews": "hotels_by_cleanliness_and_reviews"  # NEW
         }
-        return intent_mapping.get(intent, "hotel_search")
+        return intent_mapping.get(intent, "hotel_search")    
     
     def retrieve_baseline_results(self, intent: str, params: Dict[str, Any]) -> List[Dict]:
         print("\nStep 4A: Querying Database (Baseline)...")
@@ -455,10 +457,11 @@ def main():
     #         print("Error: --batch-file required for batch mode")
     #         return
     #     batch_mode(args.batch_file, config_path=args.config, queries_path=args.queries)
-    test_query = "Show me The Royal Compass"
+    test_queries = "Find hotels for solo travellers aged 20-24"
+    
     
     print("Testing retrieve_hotels function...")
-    result = retrieve_hotels(test_query)
+    result = retrieve_hotels(test_queries)
     
     print("\n" + "="*80)
     print("FINAL OUTPUT:")

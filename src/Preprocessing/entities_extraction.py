@@ -55,7 +55,8 @@ class EnhancedEntityExtractor:
             "star_rating": self._extract_star_rating(query_lower),
             "min_rating": self._extract_min_rating(query_lower),
             "min_facility_score": None,
-            "min_reviews": None
+            "min_reviews": None,
+            "min_cleanliness": None  # Add this new field
         }
         
         if self.nlp:
@@ -218,55 +219,55 @@ class EnhancedEntityExtractor:
         
         return list(set(ages))
 
-    def map_entities_to_params(self, intent: str, entities: Dict[str, any], query: str) -> Dict[str, any]:
-        params = {}
-        params["limit"] = entities.get("limit", 5)
+    # def map_entities_to_params(self, intent: str, entities: Dict[str, any], query: str) -> Dict[str, any]:
+    #     params = {}
+    #     params["limit"] = entities.get("limit", 5)
         
-        if intent == "hotels_by_traveler_gender_age":
-            if entities.get("gender"):
-                params["gender"] = entities["gender"][0]
+    #     if intent == "hotels_by_traveler_gender_age":
+    #         if entities.get("gender"):
+    #             params["gender"] = entities["gender"][0]
             
-            if entities.get("age_numbers"):
-                params["age"] = entities["age_numbers"][0]
-            elif entities.get("age"):
-                try:
-                    params["age"] = int(entities["age"])
-                except:
-                    pass
+    #         if entities.get("age_numbers"):
+    #             params["age"] = entities["age_numbers"][0]
+    #         elif entities.get("age"):
+    #             try:
+    #                 params["age"] = int(entities["age"])
+    #             except:
+    #                 pass
             
-            return params
+    #         return params
         
-        if entities.get("cities"):
-            params["city"] = entities["cities"][0].title()
+    #     if entities.get("cities"):
+    #         params["city"] = entities["cities"][0].title()
         
-        if entities.get("countries"):
-            params["country"] = entities["countries"][0].title()
+    #     if entities.get("countries"):
+    #         params["country"] = entities["countries"][0].title()
         
-        if entities.get("hotels"):
-            params["hotel_name"] = entities["hotels"][0]
+    #     if entities.get("hotels"):
+    #         params["hotel_name"] = entities["hotels"][0]
         
-        if entities.get("traveler_types"):
-            params["type"] = entities["traveler_types"][0]
+    #     if entities.get("traveler_types"):
+    #         params["type"] = entities["traveler_types"][0]
         
-        if entities.get("min_rating") is not None:
-            params["min_rating"] = entities["min_rating"]
+    #     if entities.get("min_rating") is not None:
+    #         params["min_rating"] = entities["min_rating"]
         
-        if entities.get("min_facility_score") is not None:
-            params["min_facility_score"] = entities["min_facility_score"]
+    #     if entities.get("min_facility_score") is not None:
+    #         params["min_facility_score"] = entities["min_facility_score"]
         
-        if entities.get("min_reviews") is not None:
-            params["min_reviews"] = entities["min_reviews"]
+    #     if entities.get("min_reviews") is not None:
+    #         params["min_reviews"] = entities["min_reviews"]
         
-        if entities.get("min_score") is not None:
-            params["min_score"] = entities["min_score"]
+    #     if entities.get("min_score") is not None:
+    #         params["min_score"] = entities["min_score"]
         
-        if entities.get("max_score") is not None:
-            params["max_score"] = entities["max_score"]
+    #     if entities.get("max_score") is not None:
+    #         params["max_score"] = entities["max_score"]
         
-        if entities.get("min_location_score") is not None:
-            params["min_location_score"] = entities["min_location_score"]
+    #     if entities.get("min_location_score") is not None:
+    #         params["min_location_score"] = entities["min_location_score"]
         
-        return params
+    #     return params
     
     def _extract_star_rating(self, query: str) -> Optional[int]:
         patterns = [
@@ -313,6 +314,60 @@ class EnhancedEntityExtractor:
     def _enrich_entities_with_query_patterns(self, query: str, entities: Dict[str, any]) -> Dict[str, any]:
         q_lower = query.lower()
         
+        # Extract age range for solo travelers (e.g., "20-24", "aged 20-24")
+        age_range_patterns = [
+            r'(?:age|aged)\s*(\d+)\s*-\s*(\d+)',
+            r'(\d+)\s*-\s*(\d+)\s*(?:years|year|yr)',
+            r'between\s+(\d+)\s+and\s+(\d+)\s*(?:years|year|yr)?'
+        ]
+        
+        for pattern in age_range_patterns:
+            match = re.search(pattern, q_lower)
+            if match:
+                try:
+                    min_age = int(match.group(1))
+                    max_age = int(match.group(2))
+                    if min_age not in entities["age_numbers"]:
+                        entities["age_numbers"].append(min_age)
+                    if max_age not in entities["age_numbers"]:
+                        entities["age_numbers"].append(max_age)
+                    entities["age_numbers"] = sorted(entities["age_numbers"])
+                except Exception:
+                    pass
+        
+        # Extract cleanliness score requirement
+        cleanliness_patterns = [
+            r'cleanliness\s+(?:score|scores?|rating)?\s*(?:more than|greater than|above|over|>)\s*(\d+(?:\.\d+)?)',
+            r'cleanliness\s*>\s*(\d+(?:\.\d+)?)',
+            r'clean.*(?:more than|greater than|above|over)\s*(\d+(?:\.\d+)?)'
+        ]
+        
+        for pattern in cleanliness_patterns:
+            match = re.search(pattern, q_lower)
+            if match:
+                try:
+                    entities["min_cleanliness"] = float(match.group(1))
+                    break
+                except Exception:
+                    pass
+        
+        # Extract review count requirement with "more than" logic
+        review_patterns = [
+            r'(?:more than|greater than|over|above|>)\s*(\d+)\s*(?:reviews?|review count)',
+            r'(\d+)\s*(?:\+|plus)\s*(?:reviews?)',
+            r'(?:reviews?|review count)\s*(?:more than|greater than|over|above|>)\s*(\d+)'
+        ]
+        
+        for pattern in review_patterns:
+            match = re.search(pattern, q_lower)
+            if match:
+                try:
+                    entities["min_reviews"] = int(match.group(1))
+                    break
+                except Exception:
+                    pass
+        
+        # Existing logic for facilities
         m = re.search(r'(?:facilities|facility|facility score|facilities score)\s*(?:>=|>|at least|above|over|:)?\s*([0-9]+(?:\.[0-9]+)?)', q_lower)
         if not m:
             m = re.search(r'([0-9]+(?:\.[0-9]+)?)\s*(?:\+)?\s*(?:facilities|facility)', q_lower)
@@ -327,6 +382,7 @@ class EnhancedEntityExtractor:
             if vals:
                 entities["min_facility_score"] = max(vals)
         
+        # Existing review patterns (keep for backward compatibility)
         patterns = [
             r'(?:at\s+least|minimum|min|>=|greater\s+than|more\s+than|over)\s+(\d+)\s*(?:reviews|review)',
             r'(\d+)\s*(?:\+|plus)\s*(?:reviews|review)',
@@ -338,7 +394,8 @@ class EnhancedEntityExtractor:
             mm = re.search(p, q_lower)
             if mm:
                 try:
-                    entities["min_reviews"] = int(mm.group(1))
+                    if "min_reviews" not in entities:  # Don't override if already set
+                        entities["min_reviews"] = int(mm.group(1))
                     found = True
                     break
                 except Exception:
@@ -354,10 +411,12 @@ class EnhancedEntityExtractor:
             }
             for word, val in number_words.items():
                 if re.search(r'\b' + re.escape(word) + r'\b', q_lower):
-                    entities["min_reviews"] = val
+                    if "min_reviews" not in entities:
+                        entities["min_reviews"] = val
                     found = True
                     break
         
+        # Existing score range logic
         range_match = re.search(r'between\s+([0-9]+(?:\.[0-9]+)?)\s+and\s+([0-9]+(?:\.[0-9]+)?)', q_lower)
         if range_match:
             entities["min_score"] = float(range_match.group(1))
@@ -375,7 +434,78 @@ class EnhancedEntityExtractor:
                 entities["limit"] = 5
         
         return entities
-    
+
+    def map_entities_to_params(self, intent: str, entities: Dict[str, any], query: str) -> Dict[str, any]:
+        params = {}
+        params["limit"] = entities.get("limit", 5)
+
+        if intent == "hotels_by_traveler_age_range":
+            if entities.get("age_numbers") and len(entities["age_numbers"]) >= 2:
+                params["min_age"] = min(entities["age_numbers"])
+                params["max_age"] = max(entities["age_numbers"])
+            elif entities.get("age_numbers") and len(entities["age_numbers"]) == 1:
+                age = entities["age_numbers"][0]
+                params["min_age"] = max(0, age - 2)
+                params["max_age"] = age + 2
+            else:
+                params["min_age"] = 20
+                params["max_age"] = 24
+            if entities.get("traveler_types"):
+                params["traveler_type"] = entities["traveler_types"][0]
+            return params
+
+        if intent == "hotels_by_cleanliness_and_reviews":
+            params["min_cleanliness"] = entities.get("min_cleanliness", 5.0)
+            params["min_reviews"] = entities.get("min_reviews", 20)
+            return params
+
+        if intent == "hotels_by_traveler_gender_age":
+            if entities.get("gender"):
+                params["gender"] = entities["gender"][0]
+            if entities.get("age_numbers"):
+                params["age"] = entities["age_numbers"][0]
+            elif entities.get("age"):
+                try:
+                    params["age"] = int(entities["age"])
+                except:
+                    pass
+            return params
+
+        if entities.get("cities"):
+            params["city"] = entities["cities"][0].title()
+
+        if entities.get("countries"):
+            params["country"] = entities["countries"][0].title()
+
+        if entities.get("hotels"):
+            params["hotel_name"] = entities["hotels"][0]
+
+        if entities.get("traveler_types"):
+            params["type"] = entities["traveler_types"][0]
+
+        if entities.get("min_rating") is not None:
+            params["min_rating"] = entities["min_rating"]
+
+        if entities.get("min_facility_score") is not None:
+            params["min_facility_score"] = entities["min_facility_score"]
+
+        if entities.get("min_reviews") is not None:
+            params["min_reviews"] = entities["min_reviews"]
+
+        if entities.get("min_score") is not None:
+            params["min_score"] = entities["min_score"]
+
+        if entities.get("max_score") is not None:
+            params["max_score"] = entities["max_score"]
+
+        if entities.get("min_location_score") is not None:
+            params["min_location_score"] = entities["min_location_score"]
+
+        if entities.get("min_cleanliness") is not None:
+            params["min_cleanliness"] = entities["min_cleanliness"]
+
+        return params
+
     def nationality_to_country(self, nationality: str) -> str:
         return {
             "indian": "India", "egyptian": "Egypt", "american": "United States",

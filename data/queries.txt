@@ -127,3 +127,32 @@ OPTIONAL MATCH (c)-[:LOCATED_IN]->(country:Country)
 RETURN h.hotel_id AS hotel_id, h.name AS name, avg_staff, review_count, c.name AS city, country.name AS country
 ORDER BY avg_staff DESC
 LIMIT $limit
+
+-- name: hotels_by_traveler_age_range
+MATCH (t:Traveller)-[:STAYED_AT]->(h:Hotel)
+WHERE (
+  (toLower(t.type) = toLower($traveler_type))
+)
+  AND (
+    t.age = toString($min_age)
+    OR t.age = toString($max_age)
+    OR (t.age CONTAINS '-' AND toInteger(split(t.age, '-')[0]) <= $max_age AND toInteger(split(t.age, '-')[1]) >= $min_age)
+    OR (t.age ENDS WITH '+' AND toInteger(replace(t.age, '+', '')) <= $max_age)
+  )
+WITH h, count(DISTINCT t) AS visits
+WHERE visits >= 1
+OPTIONAL MATCH (h)-[:LOCATED_IN]->(c:City)
+OPTIONAL MATCH (c)-[:LOCATED_IN]->(country:Country)
+RETURN h.hotel_id AS hotel_id, h.name AS name, visits, c.name AS city, country.name AS country, h.star_rating AS star_rating, h.cleanliness_base AS cleanliness
+ORDER BY visits DESC
+LIMIT $limit
+
+-- name: hotels_by_cleanliness_and_reviews
+MATCH (h:Hotel)<-[:REVIEWED]-(r:Review)
+WITH h, avg(r.score_cleanliness) AS avg_cleanliness, count(r) AS review_count
+WHERE avg_cleanliness > $min_cleanliness AND review_count > $min_reviews
+OPTIONAL MATCH (h)-[:LOCATED_IN]->(c:City)
+OPTIONAL MATCH (c)-[:LOCATED_IN]->(country:Country)
+RETURN h.hotel_id AS hotel_id, h.name AS name, avg_cleanliness, review_count, c.name AS city, country.name AS country, h.star_rating AS star_rating
+ORDER BY avg_cleanliness DESC, review_count DESC
+LIMIT $limit

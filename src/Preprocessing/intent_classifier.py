@@ -76,6 +76,22 @@ User Query: "{cleaned_query}"
 def classify_intent_rules(query: str) -> Dict:
     query_lower = query.lower()
     
+    if re.search(r'(\d+\s*-\s*\d+)|(\bin their \d+s\b)|(\baged?\s+\d+\b)|(\d+\s+years?\s+old)', query_lower):
+        return {
+            "intent": "hotels_by_traveler_age_range",
+            "reason": "Query specifies an age or age range",
+            "method": "rule_based"
+        }
+
+    if ("cleanliness" in query_lower or "clean" in query_lower) and \
+       any(review_keyword in query_lower for review_keyword in ["review", "reviews"]) and \
+       any(comparison in query_lower for comparison in ["more than", "greater than", "above", "over", "at least", ">"]):
+        return {
+            "intent": "hotels_by_cleanliness_and_reviews",
+            "reason": "Query asks for hotels filtered by cleanliness score and review count",
+            "method": "rule_based"
+        }
+    
     if any(kw in query_lower for kw in ["score", "rating between", "average score", "avg score", "value for money", "location score", "staff score", "best staff", "best value"]):
         return {
             "intent": "score_filtering",
@@ -108,6 +124,25 @@ def classify_intent_rules(query: str) -> Dict:
 def hybrid_intent_detection(query: str) -> Dict:
     query_lower = query.lower()
     
+    # Check for new complex intents first
+    if re.search(r'(\d+\s*-\s*\d+)|(\bin their \d+s\b)|(\baged?\s+\d+\b)|(\d+\s+years?\s+old)', query_lower):
+        return {
+            "intent": "hotels_by_traveler_age_range",
+            "reason": "Query specifies an age or age range",
+            "method": "rule_based"
+        }
+
+
+    
+    if ("cleanliness" in query_lower or "clean" in query_lower) and \
+       any(review_keyword in query_lower for review_keyword in ["review", "reviews"]) and \
+       any(comparison in query_lower for comparison in ["more than", "greater than", "above", "over", "at least", ">"]):
+        return {
+            "intent": "hotels_by_cleanliness_and_reviews",
+            "reason": "Query asks for hotels filtered by cleanliness score and review count",
+            "method": "rule_based"
+        }
+    
     if any(kw in query_lower for kw in ["score", "rating between", "average score", "avg score", "value for money", "location score", "staff score", "best staff", "best value"]):
         return {"intent": "score_filtering", "reason": "Query contains score filtering keywords", "method": "rule_based"}
     
@@ -127,9 +162,16 @@ def hybrid_intent_detection(query: str) -> Dict:
     rule_result = classify_intent_rules(query)
     return rule_result
 
+
 def refine_intent_with_entities(raw_intent: str, entities: Dict[str, Any], query: str) -> str:
     intent = raw_intent or "unknown"
     q = query.lower()
+
+    if entities.get("age_numbers") and len(entities["age_numbers"]) >= 2:
+        return "hotels_by_traveler_age_range"
+    
+    if entities.get("min_cleanliness") is not None and entities.get("min_reviews") is not None:
+        return "hotels_by_cleanliness_and_reviews"
 
     if entities.get("min_score") is not None or entities.get("max_score") is not None:
         return "hotels_by_score_range"

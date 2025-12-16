@@ -96,7 +96,21 @@ class BaselineRetriever:
         params = {}
         tpl = None
 
-        if intent == "hotels_by_score_range":
+        if intent in ("hotels_for_solo_travelers_age_range" or "hotels_by_traveler_age_range"):
+            tpl = self.queries.get("hotels_by_traveler_age_range")
+            params["min_age"] = entities.get("min_age", 20)
+            params["max_age"] = entities.get("max_age", 24)
+            type_val = entities.get("type") or (entities.get("traveler_types")[0] if entities.get("traveler_types") else None)
+            params["traveler_type"] = type_val
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+
+        elif intent == "hotels_by_cleanliness_and_reviews":
+            tpl = self.queries.get("hotels_by_cleanliness_and_reviews")
+            params["min_cleanliness"] = entities.get("min_cleanliness", 5.0)
+            params["min_reviews"] = entities.get("min_reviews", 20)
+            params["limit"] = entities.get("limit", DEFAULT_LIMIT)
+
+        elif intent == "hotels_by_score_range":
             tpl = self.queries.get("hotels_by_score_range")
             params["min_score"] = entities.get("min_score", 0.0)
             params["max_score"] = entities.get("max_score", 10.0)
@@ -222,7 +236,6 @@ class BaselineRetriever:
                 r["reviews"] = reviews_map.get(r.get("hotel_id"), [])
         
         return results
-
 
 def demo(config_path=None, queries_path=None):
     tests = [
